@@ -13,7 +13,8 @@ import random
 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
 #import subprocess
-#import runspice
+import runspice
+from ltcsimraw import ltcsimraw as ltcsimraw
 #from steptable import StepTable
 #from spifile import SpiFile as SpiFile
 
@@ -259,3 +260,12 @@ if __name__ == '__main__':
         zcable.write("rref  refp refn 100\n")
         zcable.write(".save V(*)\n")
         zcable.write(".tran 2000n\n")
+
+    cirfile = "zcable.ac.cir"
+    rawfile = "zcable.ac.raw"
+    runspice.runspice(cirfile)
+    rf=ltcsimraw(rawfile)
+    (data, labels) = rf.getSignals("pdp_p0001","pdn_0001")
+    print labels
+    print data
+    print labels
