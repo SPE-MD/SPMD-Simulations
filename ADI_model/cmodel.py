@@ -9,6 +9,7 @@ import shutil
 import argparse
 import time
 import random
+import numpy as np
 #from multiprocessing import Process
 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
@@ -75,7 +76,7 @@ def distribute_pds(start_attach_point, end_attach_point, n_pds, separation_min):
 if __name__ == '__main__':
     seed = random.seed()
     length = 50       #meters
-    segs_per_meter=10 #finite element lump size
+    segs_per_meter=20 #finite element lump size
     tpd=3.335e-9      #speed of light on this cable
     z0 = 100          #cable impedance
     l_m = tpd * z0               #inductance per meter
@@ -91,14 +92,16 @@ if __name__ == '__main__':
 
     #attach points are the node numbers 
     attach_points=distribute_pds(0,length*segs_per_meter, n_pds, 1)
-    attach_points=[3,455,458,461,464,467,470,473,476,479,481,484,487,490,493,496,499]
+    #attach_points=[3,455,458,461,464,467,470,473,476,479,482,485,488,491,494,497,500]
+    attach_points=[12,820,832,844,856,868,880,892,904,916,928,940,952,964,976,988,1000]
+    #attach_points=[1000]
 
     with open("cable.p", 'w') as cable:
 
         cable.write("*lumped transmission line model with %d segments per meter at %d meters\n"\
         % (segs_per_meter, length))
         cable.write("*and a %f meter long cable\n" % length)
-        cable.write(".include tlump.p\n")
+        cable.write(".include tlump3.p\n")
         cable.write(".include pd.p\n")
         cable.write(".param clump=%.6g\n" % clump)
         cable.write(".param llump=%.6g\n" % llump)
@@ -108,34 +111,55 @@ if __name__ == '__main__':
             cable.write("Xseg%04d p%04d n%04d p%04d n%04d 0 tlump\n" % (seg, seg, seg, seg+1, seg+1)) 
         #cable.write("rstart_term p%04d n%04d %f\n" % (0, 0, z0))
         cable.write("rend_term p%04d n%04d %f\n" % (max_segs, max_segs, z0))
+        #cable.write("rend_tern s n%04d %f\n" % (max_segs, z0/2.))
+        cable.write("**************************\n")
+        cable.write("***** PD ATTACHMENTS *****\n")
+        cable.write("**************************\n")
+        npd=0
+        ndrop=1
+        for pd in attach_points:
+            npd+=1
+            for i in range(0,ndrop):
+                if i==0:
+                    cable.write("Xseg%04d_%04d p%04d n%04d p%04d_%04d n%04d_%04d 0 tlump\n" %\
+                                    (pd, i, pd, pd, pd, i+1, pd, i+1)) 
+                else:
+                    cable.write("Xseg%04d_%04d p%04d_%04d n%04d_%04d p%04d_%04d n%04d_%04d 0 tlump\n" %\
+                                    (pd, i, pd, i, pd, i, pd, i+1, pd, i+1)) 
+            cable.write("rpdp%04d p%04d_%04d pdp_%04d 0.010\n" % (pd, pd, i+1, npd))
+            cable.write("rpdn%04d n%04d_%04d pdn_%04d 0.010\n" % (pd, pd, i+1, npd))
+            cable.write("xpd%04d pdp_%04d pdn_%04d 0 pd\n" % (npd, npd, npd))
+
 
 
     with open("zcable.ac.cir", 'w') as zcable:
         zcable.write("*ac sim command for cable impedance measurement\n")
         zcable.write(".include cable.p\n")
-        zcable.write("iac p%04d n%04d 0 AC 1\n" % (0, 0))
-        zcable.write(".ac dec 20 1 10G\n")
+        #differential signal input
+        zcable.write("vac p0000_p n0000_n 0 AC 1\n")
+        #current flows out of the negative terminal of this resistor or the s-parameters wont calculate correctly
+        zcable.write("rp p%04d p%04d_p 50\n" % (0, 0))
+        zcable.write("rn n%04d_n n%04d 50\n" % (0, 0))
+        #the next 4 resistors help make the common mode voltage for the differential source
+        zcable.write("rrpp p%04d_p refp 50\n" % 0)
+        zcable.write("rrpn refp 0 50\n")
+        zcable.write("rrnp n%04d_p refn 50\n" % 0)
+        zcable.write("rrnn refn 0 50\n")
+        zcable.write(".ac lin 500 1meg 100meg\n")
+        #this .net expression isn't helping anymore, the s-parameters are being calculated from phasors
+        #in the .ac output
+        zcable.write(".net I(rend_term) vac\n")
+        #select nodes to save to speed up the sim and reduce file size
+        zcable.write(".save \n")
+        #zcable.write("+ v(refp) v(refn)\n")
+        zcable.write("+ I(vac) I(rp) I(rend_term)\n")
+        zcable.write("+ v(p0000) v(n0000)\n")
+        zcable.write("+ S11(vac) S21(vac)\n")
+        zcable.write("+ v(p%04d) v(n%04d)\n" % (max_segs, max_segs))
 
     with open("zcable.tran.cir", 'w') as zcable:
         zcable.write("*tranient sim command for cable impedance measurement\n")
         zcable.write(".include cable.p\n")
-        zcable.write("**************************\n")
-        zcable.write("***** PD ATTACHMENTS *****\n")
-        zcable.write("**************************\n")
-        npd=0
-        ndrop=6
-        for pd in attach_points:
-            npd+=1
-            for i in range(0,ndrop):
-                if i==0:
-                    zcable.write("Xseg%04d_%04d p%04d n%04d p%04d_%04d n%04d_%04d 0 tlump\n" %\
-                                    (pd, i, pd, pd, pd, i+1, pd, i+1)) 
-                else:
-                    zcable.write("Xseg%04d_%04d p%04d_%04d n%04d_%04d p%04d_%04d n%04d_%04d 0 tlump\n" %\
-                                    (pd, i, pd, i, pd, i, pd, i+1, pd, i+1)) 
-            zcable.write("rpdp%04d p%04d_%04d pdp_%04d 0.010\n" % (pd, pd, i+1, npd))
-            zcable.write("rpdn%04d n%04d_%04d pdn_%04d 0.010\n" % (pd, pd, i+1, npd))
-            zcable.write("xpd%04d pdp_%04d pdn_%04d 0 pd\n" % (npd, npd, npd))
 
         zcable.write("vap ap 0 0\n")
         zcable.write("+pwl 0 0\n")
@@ -250,7 +274,6 @@ if __name__ == '__main__':
         #end
         zcable.write("++10n  0.0\n")
 
-
         zcable.write("rap ap p0000 50\n")
 
         zcable.write("ran an n0000 50\n")
@@ -263,9 +286,38 @@ if __name__ == '__main__':
 
     cirfile = "zcable.ac.cir"
     rawfile = "zcable.ac.raw"
-    runspice.runspice(cirfile)
+    #runspice.runspice(cirfile)
     rf=ltcsimraw(rawfile)
-    (data, labels) = rf.getSignals("pdp_p0001","pdn_0001")
-    print labels
-    print data
+
+    endp = "p%04d" % ( max_segs)
+    endn = "n%04d" % ( max_segs)
+    #(data, labels) = rf.getSignals(["refp","refn","p0000","n0000", endp, endn],[],["S11(vac)", "s21(vac)"])
+    (data, labels) = rf.getSignals(["p0000","n0000", endp, endn],["rp", "rend_term"],["S11(vac)", "s21(vac)"])
+
+    with open("zcable.csv", 'w') as zcable:
+        zcable.write("#freq, s11_mag, s21_mag, s11_mp_mag, s21_mp_mag")
+        for x in data:
+            #print x[1] 
+            #print x[2] 
+            s11  = rf.decodeComplex(x[7])
+            s21 =  rf.decodeComplex(x[8])
+
+            vend   = x[3]-x[4]
+            iend   = x[6]
+            vin    = x[1]-x[2]
+            iin    = x[5]
+            zin    = vin/iin
+            zin    = 100
+            zend   = 100
+            zin_x  = np.conjugate(zin)
+            zend_x = np.conjugate(zend)
+            a1 = (vin - (iin*zin_x))
+            b1 = (vin + (iin*zin))
+            a2 = (vend - (iend*zend_x))
+            b2 = (vend + (iend*zend))
+            s11_mp = rf.decodeComplex(b1 / a1)
+            s21_mp = rf.decodeComplex(b2 / a1)
+            zcable.write("%.12g, %.12g, %.12g, %.12g, %.12g\n" % (
+                    x[0], s11[0], s21[0], s11_mp[0], s21_mp[0]
+                    ))
     print labels

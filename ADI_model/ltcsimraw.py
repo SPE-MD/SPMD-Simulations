@@ -252,7 +252,7 @@ class ltcsimraw():
         i = self.variableNumber[var]
         return self.tp[i]
 
-    def getSignals(self, vlist, ilist):
+    def getSignals(self, vlist, ilist, others=[]):
 
         y = []
         labels = ["time"]
@@ -269,6 +269,15 @@ class ltcsimraw():
             s = "(%s)" % i.lower()
             for i in self.variables:
                 if i.startswith("i") and s in i:
+                    y.append(self.variableNumber[i])
+                    labels.append(i)
+                    continue
+
+        for x in others:
+            s = x.lower()
+            for i in self.variables:
+                if s in i:
+                    #print self.variableNumber[i]
                     y.append(self.variableNumber[i])
                     labels.append(i)
                     continue
