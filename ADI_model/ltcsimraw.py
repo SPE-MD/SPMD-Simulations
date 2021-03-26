@@ -40,6 +40,10 @@ class ltcsimraw():
 
         ntrys=0
         file=None
+        if not os.path.isfile(self.rawfile):
+            print("Raw File does not exist!\n-> ",self.rawfile)
+            exit(1)
+
         while file==None and os.path.isfile(self.rawfile):
             try:
                 file=open(self.rawfile, "rb")
