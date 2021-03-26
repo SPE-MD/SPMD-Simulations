@@ -1,6 +1,7 @@
 #ADI Model Specific Ignores
 data/
 zcable*
+cable.p
 
 
 #LT Spice Specific Ignores
