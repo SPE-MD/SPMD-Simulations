@@ -45,7 +45,7 @@ class ltcsimraw():
                 file=open(self.rawfile, "rb")
                 break
             except:
-                print "rawfile: cannot open: %s" % rawfile
+                print( "rawfile: cannot open: %s" % rawfile)
                 ntrys += 1
                 if(ntrys > 100):
                     exit(1)
@@ -69,8 +69,8 @@ class ltcsimraw():
         file.seek(0,0)
         r = file.read(2)
         file.seek(fpointer,0)
-        if r[0]=="T" and r[1]=='\0':
-            return True
+        if r[0]== ord('T') and  r[1]==0:
+                return True
         return False
 
     def lt_readline(self,file):
@@ -83,16 +83,22 @@ class ltcsimraw():
         #If x64 is detected read the chars as 16 bits and throw away the 
         #trailing '\0'
         if self.x64==True:
+            print("Reading x64 file")
             nread=2
+        else:
+            print("Reading x32 file")
         while(keep_reading):
-            r = file.read(nread)[0]
-            if(r=='\n'):
+            r = file.read(nread)
+            #print("r len: ", len(r))
+            r = r[0]
+            if(r==ord('\n')):
                 keep_reading=False
-            elif(r=='\0'):
-                print "Should never get here!!!"
+            elif(r==ord('\0')):
+                print( "Should never get here!!!")
                 pass
             else:
-                line += r
+                line += chr(r)
+        print(line)
         return line
 
     def readPreamble(self,file):
@@ -100,14 +106,14 @@ class ltcsimraw():
         #for line in iter(file.readline, ''):
         while(True):
             line = self.lt_readline(file)
-            #print line
+            #print( line)
             if line.startswith("Variables:"):
                 break
             line = line.rstrip()
-            #print "#" + line
+            #print( "#" + line)
             ln = line.split(": ") 
-            #print line
-            #print ln
+            #print( line)
+            #print( ln)
             self.preamble.update({ln[0]:ln[1]})
 
         self.nvars =  int(self.preamble['No. Variables'])
@@ -123,7 +129,7 @@ class ltcsimraw():
             if line.startswith("Binary:"):
                 break
             line = line.rstrip()
-            #print line
+            #print( line)
             ln = line.split()
             #variableNumber[ln[1].lower()] = ln[0]
             self.variables.append(ln[1].lower())
@@ -139,7 +145,7 @@ class ltcsimraw():
         sig = []
         time = []
         with open(self.rawfile, "rb") as f:
-            #print self.binary_start
+            #print( self.binary_start)
             f.seek(self.binary_start)
             size = self.getChunkSize(f)
             ans = []
@@ -178,12 +184,12 @@ class ltcsimraw():
     def readReal(self,chunk,signals):
         x = struct.unpack('d',chunk[0:8])[0]
         ret = [abs(x)]
-        #print x
+        #print( x)
         for y in signals:
             start = (y * 4) + 4
             end = start + 4
             p = struct.unpack('f',chunk[start:end])[0]
-            #print p
+            #print( p)
             ret.append(p)
         return ret
 
@@ -196,7 +202,7 @@ class ltcsimraw():
         end = handle.tell()
         nbytes = end-self.binary_start
         handle.seek(x)
-        return nbytes/self.points
+        return nbytes//self.points
 
     def readLastTimePoint(self):
         if self.filehandle == None:
@@ -266,7 +272,7 @@ class ltcsimraw():
             s = "v(%s)" % v.lower()
             for i in self.variables:
                 if s in i:
-                    #print i
+                    #print( i)
                     y.append(self.variableNumber[i])
                     labels.append(s)
                     continue
@@ -283,12 +289,12 @@ class ltcsimraw():
             s = x.lower()
             for i in self.variables:
                 if s in i:
-                    #print self.variableNumber[i]
+                    #print( self.variableNumber[i])
                     y.append(self.variableNumber[i])
                     labels.append(i)
                     continue
 
-        #print y
+        #print( y)
         sig = self.getSignal(y)
         return (sig, labels)
 
@@ -321,7 +327,7 @@ class ltcsimraw():
         import subprocess
     
         for c in corners:
-            print c
+            print( c)
         gnuplot_bin = ['/usr/bin/env', 'gnuplot','-persist', '-']
         gp = subprocess.Popen(gnuplot_bin,stdin = subprocess.PIPE,
         stdout = subprocess.PIPE, stderr = subprocess.PIPE)
@@ -358,7 +364,7 @@ class ltcsimraw():
     
         gp.stdin.write("unset multiplot")
         #for line in iter(gp.stderr.readline,''):
-               #print line.rstrip()
+               #print( line.rstrip())
         gp.communicate('e\nquit\n')
 
     #pass the rawfile object
@@ -369,7 +375,7 @@ class ltcsimraw():
 
 def _binarySearch(timeSeries,time,start,end):
     mid = (end + start) / 2 
-    #print "%d\t%e\t%e" % (mid, timeSeries[mid][0],time)
+    #print( "%d\t%e\t%e" % (mid, timeSeries[mid][0],time))
     if(mid == start or mid == end):
         return mid
     if(time < timeSeries[mid][0]):
@@ -447,18 +453,18 @@ if __name__ == '__main__':
 
     if(len(sys.argv) > 1 and sys.argv[-1] != None):
         rawfile = sys.argv.pop()
-        #print rawfile
+        #print( rawfile)
     else:
         parser.print_help()
         exit(1)
 
     args = parser.parse_args()
-    #print "*" + args
+    #print( "*" + args)
 
     rf = ltcsimraw(rawfile)
 
     if args.signal:
-        print "Stats:"
+        print( "Stats:")
         sigs = args.signal.split()
         ans = []
         for i in sigs:
@@ -475,21 +481,21 @@ if __name__ == '__main__':
                 std = np.std(sig[1])
                 charge = np.trapz(sig[1],sig[0])
                 ans.append([y,std,min,max,charge,median])
-                #print "%s %e %e %e %e" % (y ,std, min, max, charge)
-        print len(ans)
+                #print( "%s %e %e %e %e" % (y ,std, min, max, charge))
+        print( len(ans))
         a = np.array(ans)
         index = np.argsort(a[:,1])
         index = index[::-1]
-        print "%13s %13s %13s %13s %13s %13s" % ("RMS","Min","Max","Charge","Median","Name")
+        print( "%13s %13s %13s %13s %13s %13s" % ("RMS","Min","Max","Charge","Median","Name"))
         for n,i in enumerate(index):
-            print "% e % e % e % e % e %s" % (a[i][1], a[i][2], a[i][3],
-                    a[i][4], a[i][5], rf.variables[int(a[i][0])])
+            print( "% e % e % e % e % e %s" % (a[i][1], a[i][2], a[i][3],
+                    a[i][4], a[i][5], rf.variables[int(a[i][0])]))
             if n > 10:
                 break
         exit(0)
 
     if args.sub:
-        print "Substrate Currents"
+        print( "Substrate Currents")
         ans = []
         for i in rf.variables:
             i = i.lower()
@@ -504,19 +510,19 @@ if __name__ == '__main__':
                 std = np.std(sig[1])
                 charge = np.trapz(sig[1],sig[0])
                 ans.append([y,std,min,max,charge])
-                #print "%s %e %e %e %e" % (y ,std, min, max, charge)
+                #print( "%s %e %e %e %e" % (y ,std, min, max, charge))
         a = np.array(ans)
         index = np.argsort(a[:,1])
         index = index[::-1]
-        print "%13s %13s %13s %13s %13s" % ("RMS","Min","Max","Charge","Name")
+        print( "%13s %13s %13s %13s %13s" % ("RMS","Min","Max","Charge","Name"))
         for n,i in enumerate(index):
-            print "% e % e % e % e %s" % (a[i][1], a[i][2], a[i][3], a[i][4], rf.variables[int(a[i][0])])
+            print( "% e % e % e % e %s" % (a[i][1], a[i][2], a[i][3], a[i][4], rf.variables[int(a[i][0])]))
             if n > 10:
                 break
         exit(0)
 
     if args.match:
-        print "Node(s) Matching: " + args.match
+        print( "Node(s) Matching: " + args.match)
         ans = []
         for i in rf.variables:
             if i.startswith("i") and i.endswith(args.match.lower() + ")"):
@@ -530,22 +536,22 @@ if __name__ == '__main__':
                 std = np.std(sig[1])
                 charge = np.trapz(sig[1],sig[0])
                 ans.append([y,std,min,max,charge])
-                #print "%s %e %e %e %e" % (y ,std, min, max, charge)
+                #print( "%s %e %e %e %e" % (y ,std, min, max, charge))
         if(len(ans)):
             a = np.array(ans)
             index = np.argsort(a[:,1])
             index = index[::-1]
-            print "%13s %13s %13s %13s %13s" % ("RMS","Min","Max","Charge","Name")
+            print( "%13s %13s %13s %13s %13s" % ("RMS","Min","Max","Charge","Name"))
             for n,i in enumerate(index):
-                print "% e % e % e % e %s" % (a[i][1], a[i][2], a[i][3], a[i][4], rf.variables[int(a[i][0])])
+                print( "% e % e % e % e %s" % (a[i][1], a[i][2], a[i][3], a[i][4], rf.variables[int(a[i][0])]))
                 if n > 10:
                     break
         else:
-            print "No Match"
+            print( "No Match")
         exit(0)
 
     elif args.xfer:
-        print "Use the script \"acAnalysis.py\" instesd"
+        print( "Use the script \"acAnalysis.py\" instesd")
         exit (0)
 
     elif args.volt or args.current:
@@ -588,7 +594,7 @@ if __name__ == '__main__':
                     data[i].append(x)
                 labels.append("v(%s,%s)" % (d[0],d[1]))
             except:
-                print "problem extracting signal: v(%s,%s)" % (d[0],d[1])
+                print( "problem extracting signal: v(%s,%s)" % (d[0],d[1]))
 
 
         istart = 0
@@ -619,7 +625,7 @@ if __name__ == '__main__':
             from steptable import StepTable 
             table = StepTable()
             table.readLogfile(logfile)
-            print table.steps
+            print( table.steps)
 
             rf.plotComplex(sigs,nsteps,names,table.steps)
         elif(args.plot):
@@ -645,7 +651,7 @@ if __name__ == '__main__':
 
             plotstring = ",".join(pstrings)
             plotstring = "plot %s\n" % (plotstring)
-            print plotstring
+            print( plotstring)
             gp.stdin.write(plotstring)
 
             for i,n in enumerate(names):
@@ -655,7 +661,7 @@ if __name__ == '__main__':
                     gp.stdin.write(line)
                     gp.stdin.flush()
 
-            print len(names)
+            print( len(names))
             gp.communicate('e\nquit\n')
             
         elif(args.multiplot):
@@ -669,7 +675,7 @@ if __name__ == '__main__':
             height = 480 + 120*(len(names)-1)
             if height > 900:
                 height = 900
-            print height
+            print( height)
             gp.stdin.write( \
 "set terminal qt size 640,%d enhanced font 'Linear Helv Cond Bold,9'\n" % \
             height)
@@ -693,41 +699,41 @@ if __name__ == '__main__':
                     gp.stdin.write(line)
                     gp.stdin.flush()
 
-            print len(names)
+            print( len(names))
             gp.stdin.write("unset multiplot\n")
             gp.communicate('e\nquit\n')
 
         elif rf.complex_data == False:
             pass
-            #mpUtil.aoaPrint(sigs)
+            #mpUtil.aoaPrint((sigs))
             for i in sigs:
-                print i
+                print( i)
 
     elif args.copy:
         rf.copyRawFile()
 
     elif args.preamble:
-        print rf.preamble 
+        print( rf.preamble )
         exit(0)
 
     elif args.list:
         for v in rf.variables:
-            print v
+            print( v)
         exit(0)
 
     elif args.bias:
         rf.readLastTimePoint()
         for i,v in enumerate(rf.tp):
             if i == 0:
-                print "*%s=%s" % (rf.variables[i],rf.tp[i])
-                print ".ic"
+                print( "*%s=%s" % (rf.variables[i],rf.tp[i]))
+                print( ".ic")
                 continue
             if(rf.variables[i].startswith("v")):
-                print "+%s=%s" % (rf.variables[i],rf.tp[i])
+                print( "+%s=%s" % (rf.variables[i],rf.tp[i]))
 
     else:
         rf.readTimePoint()
         rf.readLastTimePoint()
         for i,v in enumerate(rf.tp):
-            #print rf.getVal("time")
-            print "%d %s %s" % (i,rf.variables[i],rf.tp[i])
+            #print( rf.getVal("time"))
+            print( "%d %s %s" % (i,rf.variables[i],rf.tp[i]))

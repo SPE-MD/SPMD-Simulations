@@ -51,7 +51,7 @@ def toEngineeringNotation(num):
         m = re.match('[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?',num)
         if(m):
             num = float(num)
-            print num
+            print( num)
         else:
             return num
     
@@ -59,7 +59,7 @@ def toEngineeringNotation(num):
     if(num == 0):
         return refdes % (num, "")
 
-    #print self.num
+    #print( self.num)
     size = 6;
     precision = 3
     power = math.log10(abs(num))
@@ -127,7 +127,7 @@ def aoaPrint(aoa):
         line = ""
         for col in row:
             line = line + col + " "
-        print line
+        print( line)
 
 def aoa2csv(aoa):
     output = ""
@@ -207,7 +207,7 @@ def errorPrint(refdes,message):
     normCode = "\x1b[0m";
     #colorCode = "\e[1;31m"; #linux/pi style
     string = colorCode+msg+normCode
-    print string
+    print( string)
 
 def warningPrint(refdes,message):
     msg = refdes % message
@@ -216,7 +216,7 @@ def warningPrint(refdes,message):
     normCode = "\x1b[0m";
     #colorCode = "\e[1;31m"; #linux/pi style
     string = colorCode+msg+normCode
-    print string
+    print( string)
 
 
 #30 black

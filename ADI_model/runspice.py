@@ -18,7 +18,7 @@
 #
 #results = pool.map(countTo, range(0000000,10000000,1000000))
 #
-#print results
+#print( results)
 ##close the pool and wait for the work to finish 
 #pool.close() 
 #pool.join() 
@@ -32,9 +32,10 @@ import os.path
 from multiprocessing import Process, Pipe, Queue
 
 def runLTspice(cirfile,executable,msgQueue):
-    #print cirfile
+    #print( cirfile)
+
     while not os.path.isfile(cirfile):
-        print "waiting for cir: %s\r" % cirfile
+        print( "waiting for cir: %s\r" % cirfile)
         time.sleep(0.4)
     #subprocess.call(["touch",cirfile])
     msgQueue.put(None)
@@ -42,25 +43,25 @@ def runLTspice(cirfile,executable,msgQueue):
     try:
         #if "win" in sys.platform and sys.platform is not "darwin":
         if sys.platform == "darwin":
-            print "darwin"
+            print( "darwin")
             exe = ' '.join(executable)
-            print exe
+            print( exe)
             subprocess.call((exe) ,shell=True)
         elif "win" in sys.platform:
-            print "windows"
+            print( "windows")
 
             subprocess.call(executable, shell=True)
         else:
             subprocess.call(executable)
     except:
-        print "Issue Running Spice"
+        print( "Issue Running Spice")
         msgQueue.put("Done")
     msgQueue.put("Done")
 
 def tail(logfile,pipe):
 
     while not os.path.isfile(logfile):
-        print "waiting for log: %s\r" % logfile
+        print( "waiting for log: %s\r" % logfile)
         if(pipe.poll()):
                     rcv = pipe.recv()
                     if(rcv == "Done"):
@@ -69,7 +70,7 @@ def tail(logfile,pipe):
 
     f=open(logfile, "r")
 
-    print "following   %s" % logfile
+    print( "following   %s" % logfile)
     line = ""
 
     counter = 0;
@@ -86,7 +87,7 @@ def tail(logfile,pipe):
                 for m in filter:
                     if line.startswith(m):
                         sys.stdout.write("%-80s\n" % line)
-                        #print ""
+                        #print( "")
                 line = ""
                 counter = 0
             elif(len(read) > 0):
@@ -103,7 +104,7 @@ def tail(logfile,pipe):
     f.close
 
 def makeNetlist(ascfile):
-    print "*** " + ascfile
+    print( "*** " + ascfile)
     """ ltspice path """
     #exe = os.path.join("C:\\","Program Files","LTC","LTspiceIV","scad3.exe")
     #exe = os.path.join("C:\\","Program Files (x86)","LTC","LTspiceIV","scad3.exe")
@@ -142,7 +143,7 @@ def makeNetlist(ascfile):
 
     #os.remove the old log files
     if(not os.path.isfile(ascfile)):
-        print "the ascfile %s does not exist" % ascfile
+        print( "the ascfile %s does not exist" % ascfile)
         return []
     
     spice.start()
@@ -163,7 +164,7 @@ def makeNetlist(ascfile):
 #strips off the .cir and uses the basename to monitor .log
 def runspice(cirfile,batch=True):
 
-    print "*** " + cirfile
+    print( "*** " + cirfile)
     """ ltspice path """
     exe = os.path.join("C:\\","Program Files","LTC","LTspiceIV","scad3.exe")
     exe = os.path.join("C:\\","Program Files (x86)","LTC","LTspiceIV","scad3.exe")
@@ -178,7 +179,7 @@ def runspice(cirfile,batch=True):
 
     """ for windows """
     windows = False
-    print sys.platform
+    print( sys.platform)
     if sys.platform == "darwin":
         #exe = os.path.join("C:","Program\ Files","LTC","LTspiceXVII","XVIIx86.exe")
 
@@ -188,16 +189,16 @@ def runspice(cirfile,batch=True):
                 "Program Files (x86)","LTC","LTspiceXVII","XVIIx86.exe")
         scad = ["wine",exe,'-wine','-b']
         scad = ['wine C:/Program\ Files/LTC/LTspiceXVII/XVIIx86.exe -wine -b']
-        print scad
+        print( scad)
     elif "win" in sys.platform :
-        print "Windows"
+        print( "Windows")
         windows = True
         scad = [exe,'-b']
         if not batch:
             scad = [exe]
    
     if not os.path.isfile(exe):
-        print exe
+        print( exe)
 
     """
     TODO: 
@@ -214,7 +215,7 @@ def runspice(cirfile,batch=True):
 
     #os.remove the old log files
     if(not os.path.isfile(cirfile)):
-        print "the cirfile %s does not exist" % cirfile
+        print( "the cirfile %s does not exist" % cirfile)
         return []
     if(os.path.isfile(logfile)): os.remove(logfile)
 
@@ -239,14 +240,14 @@ def runspice(cirfile,batch=True):
         if parent_conn.poll():
             rcv = parent_conn.recv()
             log.append(rcv)
-            #print "%s" % rcv
+            #print( "%s" % rcv)
             ##sys.stdout.write("%-80s\r" % rcv)
         time.sleep(0.01)
     
     parent_conn.send("Done")
     while parent_conn.poll():
         rcv = parent_conn.recv()
-        #print "%s" % rcv
+        #print( "%s" % rcv)
         log.append(rcv)
         #time.sleep(0.02)
 

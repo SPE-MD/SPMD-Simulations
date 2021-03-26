@@ -36,23 +36,23 @@ def distribute_pds(start_attach_point, end_attach_point, n_pds, separation_min):
     #save room for the N/2 pds at the start and end of the mixing segment if
     #there is more than 1 pd
 
-    #print "\nNumber of PDs = %d" % n_pds
+    #print( "\nNumber of PDs = %d" % n_pds)
     if(n_pds % 2):
-        #print "odd number of PDs"
+        #print( "odd number of PDs")
         start = int((start_attach_point + ((n_pds+1)/2)*separation_min))
         end   = int((end_attach_point   - ((n_pds+1)/2)*separation_min))
         #when down to the last placement, min and max might switch places
         #the random number generator does not like this, so get them sorted out
         start = min(start,end)
         end   = max(start,end)
-        #print "Start  %d" % start
-        #print "End    %d" % end
-        #print "N_pds  %d" % n_pds
+        #print( "Start  %d" % start)
+        #print( "End    %d" % end)
+        #print( "N_pds  %d" % n_pds)
         if(start == end):
             half_point = start
         else:
             half_point   = random.randrange(start, end, 1)
-        #print "Attach %d" % half_point
+        #print( "Attach %d" % half_point)
         n_pds -= 1
         if(n_pds > 1):
             attach_points.extend(distribute_pds(start_attach_point, half_point, n_pds/2, separation_min))
@@ -65,17 +65,17 @@ def distribute_pds(start_attach_point, end_attach_point, n_pds, separation_min):
     else: #must be 2 or more pds to get here
         start = int((start_attach_point + ((n_pds)/2)*separation_min))
         end   = int((end_attach_point   - ((n_pds)/2)*separation_min))
-        #print "Start  %d" % start
-        #print "End    %d" % end
-        #print "N_pds  %d" % n_pds
+        #print( "Start  %d" % start)
+        #print( "End    %d" % end)
+        #print( "N_pds  %d" % n_pds)
         half_point   = random.randrange(start, end, 1)
-        #print "Half   %d" % half_point
+        #print( "Half   %d" % half_point)
 
         attach_points.extend(distribute_pds(start_attach_point, half_point, n_pds/2, separation_min))
         attach_points.extend(distribute_pds(half_point,   end_attach_point, n_pds/2, separation_min))
 
 
-    #print attach_points
+    #print( attach_points)
     return attach_points
 
 if __name__ == '__main__':
@@ -134,7 +134,7 @@ if __name__ == '__main__':
                 cable.write("*PD %02d - attach at %.3f meters with %.3f meter drop\n" % \
                         (npd, pd/segs_per_meter, ndrop / segs_per_meter))
 
-                print ("*PD %02d - attach at %.3f meters with %.3f meter drop" % \
+                print("*PD %02d - attach at %.3f meters with %.3f meter drop" % \
                         (npd, pd/float(segs_per_meter), ndrop / float(segs_per_meter)))
 
                 for i in range(0,ndrop):
@@ -323,39 +323,39 @@ if __name__ == '__main__':
         logSave  = os.path.join("data",design_md5,design_md5+".log")
         rawSave  = os.path.join("data",design_md5,design_md5+".raw")
         outputdb = os.path.join("data",design_md5)
-        print design_md5
+        print( design_md5)
         if not os.path.exists("data"):
-            print "Data Folder does not exist"
-            print "Creating...." 
+            print( "Data Folder does not exist")
+            print( "Creating...." )
             try:
                 os.makedirs("data")
             except:
-                print "Cannot create data folder"
+                print( "Cannot create data folder")
                 exit(1)
 
         if not os.path.exists(outputdb):
-            print "Regression Folder %s does not exist" % design_md5
-            print "Creating...." 
+            print( "Regression Folder %s does not exist" % design_md5)
+            print( "Creating...." )
             try:
                 os.makedirs(outputdb)
                 spi.outputToFile(spiSave)
             except:
-                print "Cannot create regression folder"
+                print( "Cannot create regression folder")
                 exit(1)
 
         #if there is already raw and log data in the md5 directory then assume the sim has 
         #already been run, otherwise run the sim
         try:
             open(spiSave,"r")
-            print spiSave
+            print( spiSave)
             open(logSave,"r")
-            print logSave
+            print( logSave)
             open(rawSave,"r")
-            print rawSave
-            print "Pulling Sim From database"
+            print( rawSave)
+            print( "Pulling Sim From database")
 
         except:
-            print "Running Simulation"
+            print( "Running Simulation")
             runspice.runspice(spiSave)
 
         #determine the node names for the end of the cable
@@ -366,12 +366,12 @@ if __name__ == '__main__':
         rf=ltcsimraw(rawSave)
         (data, labels) = rf.getSignals(["p0000","n0000", endp, endn],["rp", "rend_term"],["S11(vac)", "s21(vac)"])
 
-        #print the s-parameters in a .csv file
+        #print( the s-parameters in a .csv file)
         with open(csvFile, 'a') as zcable:
             zcable.write("#freq, s11_mag, s21_mag, s11_mp_mag, s21_mp_mag\n")
             for x in data:
-                #print x[1] 
-                #print x[2] 
+                #print( x[1] )
+                #print( x[2] )
                 s11  = rf.decodeComplex(x[7])
                 s21 =  rf.decodeComplex(x[8])
 
@@ -394,4 +394,4 @@ if __name__ == '__main__':
                         x[0], s11[0], s21[0], s11_mp[0], s21_mp[0]
                         ))
             zcable.write("\n\n")
-        print labels
+        print( labels)

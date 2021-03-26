@@ -15,12 +15,12 @@ import argparse
 import hashlib
 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
-sys.path.append(os.path.join(os.environ['MP_SCRIPTS'])) #adds this file's director to the path
-sys.path.append(os.path.join(os.environ['MP_SCRIPTS'],"ide")) #adds this file's director to the path
+# sys.path.append(os.path.join(os.environ['MP_SCRIPTS'])) #adds this file's director to the path
+# sys.path.append(os.path.join(os.environ['MP_SCRIPTS'],"ide")) #adds this file's director to the path
 #import mpUtil
-from mcalc import Mcalc as mcalc
-from subcircuit import Subcircuit as subcircuit
-from instance import Instance as Instance
+#from mcalc import Mcalc as mcalc
+#from subcircuit import Subcircuit as subcircuit
+#from instance import Instance as Instance
 
 class SpiFile(object):
     def __init__(self,spifile):
@@ -34,7 +34,7 @@ class SpiFile(object):
         self.stop = set([])
 
     def readCircuit(self,infile=None):
-        #print infile
+        #print( infile)
         if(infile==None):
             infile = self.spifile
        
@@ -45,7 +45,7 @@ class SpiFile(object):
         #        file=open(infile)
         #        break
         #    except:
-        #        print "rawfile: cannot open: %s" % infile
+        #        print( "rawfile: cannot open: %s" % infile)
         #        ntrys += 1
         #        if(ntrys > 100):
         #            exit(1)
@@ -53,7 +53,7 @@ class SpiFile(object):
         try :
             file = open(infile)
         except:
-            print "cannot open: %s" % infile
+            print( "cannot open: %s" % infile)
             return None
 
         with file as inf:
@@ -65,7 +65,7 @@ class SpiFile(object):
         try :
             file = open(stoplist)
         except:
-            print "cannot open: %s" % stoplist
+            print( "cannot open: %s" % stoplist)
             return None
 
         with file as inf:
@@ -83,7 +83,7 @@ class SpiFile(object):
             cont = line_continue.match(line)
             if(cont):
                 newline = " " + line[1:]
-                #print "%d\t%s" % (i,newline)
+                #print( "%d\t%s" % (i,newline))
                 self.joined[-1] += newline
             else:
                 self.joined.append(line)
@@ -93,7 +93,7 @@ class SpiFile(object):
                 self.includeFiles.append(ln[1])
                 isCirFile = ln[1].endswith(".cir")
                 if(self.followInclude or isCirFile):
-                    print "FOLLOWING %s" % ln[1]
+                    print( "FOLLOWING %s" % ln[1])
                     inc = self._followInclude(self.joined[-1])
                     self.joined.pop()
                     self.joined.extend(inc)
@@ -101,15 +101,15 @@ class SpiFile(object):
         return self.joined
 
     def _followInclude(self,line):
-        #print self.spifile
-        #print line
-        print os.path.abspath(self.spifile)
+        #print( self.spifile)
+        #print( line)
+        print( os.path.abspath(self.spifile))
         dir = os.path.dirname(os.path.abspath(self.spifile))
         ln = line.split()
         inc = ln[1]
         path = os.path.join(dir,inc)
-        #print path
-        #print os.path.isfile(path)
+        #print( path)
+        #print( os.path.isfile(path))
         circuit = SpiFile(path)
         circuit.readCircuit(path)
         circuit.digestSpiceFile()
@@ -132,7 +132,7 @@ class SpiFile(object):
                     cir.write(i+"\n")
         #############################
         except:
-            print "issue creating new spifile : %s " % test.spifile
+            print( "issue creating new spifile : %s " % test.spifile)
 
 
     #creates a dictionary of sub-circuits using the sub-circuit name as the hash key
@@ -155,8 +155,8 @@ class SpiFile(object):
         self.subckts = {}
         self.subckts[sname] = subcircuit(sname)
         for line in self.joined:
-            #print sname
-            #print line
+            #print( sname)
+            #print( line)
             if re_main_network.search(line):
                 sname="main_network_description"
                 self.subckts[sname].addSubcktDef(line)
@@ -165,11 +165,11 @@ class SpiFile(object):
                 ln = line.split()
                 sname=ln[1]
                 if(sname in self.stop):
-                    #print "stop: " + sname
+                    #print( "stop: " + sname)
                     #sname  = None
                     sname="main_network_description"
                 else:
-                    #print "add : " + sname
+                    #print( "add : " + sname)
                     #initalize new object here
                     self.subckts[sname] = subcircuit(sname)
                     self.subckts[sname].addSubcktDef(line)
@@ -178,15 +178,15 @@ class SpiFile(object):
                 sname="main_network_description"
                 continue
             elif(re_comment.search(line)):
-                #print "comment"
-                #print line
+                #print( "comment")
+                #print( line)
                 continue
             elif(re_leadspace.search(line)):
-                #print "leadspace: %s" % line
+                #print( "leadspace: %s" % line)
                 continue
             elif(re_param.search(line)):
-                #print sname
-                #print line
+                #print( sname)
+                #print( line)
                 self.subckts[sname].addBodyParam(line)
                 continue
             elif(re_model.search(line)):
@@ -199,7 +199,7 @@ class SpiFile(object):
                 sname = None
                 pass
             elif(re_nonword.search(line)):
-                print "nonword: |%s|" % line
+                print( "nonword: |%s|" % line)
                 continue
             if(sname is None) :
                 sname="main_network_description"
@@ -231,7 +231,7 @@ class SpiFile(object):
     def findNet(self,net):
         for i in self.flat:
             if net in i:
-                print i
+                print( i)
 
     def netDevices(self,net,heirarchy=None):
         if(heirarchy == None):
@@ -258,7 +258,7 @@ class SpiFile(object):
         try :
             file = open(settings)
         except:
-            print "cannot open: %s" % settings
+            print( "cannot open: %s" % settings)
             return None
 
         lib = None
@@ -314,7 +314,7 @@ class SpiFile(object):
                 continue
             else:
                 buf += i
-        m.update(buf)
+        m.update(buf.encode('utf-8'))
         return m.hexdigest()
 
 if __name__ == '__main__':
@@ -337,22 +337,22 @@ if __name__ == '__main__':
     instances = circuit.instantiate()
 
     #newspi = circuit.makeNewMain("ilim_dac3")
-    #print newspi.md5(True,True,True)
+    #print( newspi.md5(True,True,True))
     #
     #newspi2 = circuit.makeNewMain("pm_tub5v5")
-    #print newspi2.md5(True,True,True)
+    #print( newspi2.md5(True,True,True))
 
     #newspi3 = circuit.makeNewMain("main_network_description")
-    #print newspi3.md5(True,True,True)
+    #print( newspi3.md5(True,True,True))
     #newspi3.outputToFile("main.spi")
 
     #exit(0)
     for i in circuit.flat:
         if(i.model == None):
-            print "wierd %s" % i
+            print( "wierd %s" % i)
         else:
             if i.children:
-                print "*%s" % i
+                print( "*%s" % i)
             else:
-                print i
+                print( i)
             pass
