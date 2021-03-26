@@ -24,6 +24,7 @@
 #pool.join() 
 
 import sys
+import platform
 import subprocess
 import select
 import time
@@ -51,6 +52,15 @@ def runLTspice(cirfile,executable,msgQueue):
             print( "windows")
 
             subprocess.call(executable, shell=True)
+        elif "linux" in sys.platform:
+            print( "linux")
+            if 'Microsoft' in platform.uname().release:
+                print ("Windows Subsystem for Linux")
+                exe = ' '.join(executable)
+                print( exe)
+                subprocess.call((exe) ,shell=True)
+            else:
+                subprocess.call(executable)
         else:
             subprocess.call(executable)
     except:
@@ -127,7 +137,14 @@ def makeNetlist(ascfile):
     elif "win" in sys.platform:
         windows = True
         scad = [exe,'-netlist']
-   
+    elif "linux" in sys.platform:
+        if 'Microsoft' in platform.uname().release:
+            print ("Windows Subsystem for Linux")
+            exe = "/mnt/c/Program\ Files/LTC/LTspiceXVII/XVIIx64.exe"
+            windows - True
+            scad = [exe,'-netlist']
+
+
     """
     TODO: 
     LTSPICE has to be run in whatever path the cir file is sitting or the library links dont work
@@ -196,7 +213,16 @@ def runspice(cirfile,batch=True):
         scad = [exe,'-b']
         if not batch:
             scad = [exe]
-   
+    elif "linux" in sys.platform :
+        if 'Microsoft' in platform.uname().release:
+            print ("Windows Subsystem for Linux")
+            exe = "/mnt/c/Program\ Files/LTC/LTspiceXVII/XVIIx64.exe"
+            print( "linux")
+            windows = True
+            scad = [exe,'-b']
+            if not batch:
+                scad = [exe]
+  
     if not os.path.isfile(exe):
         print( exe)
 
