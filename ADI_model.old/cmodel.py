@@ -1,10 +1,6 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
-#Copyright  2021 <Analog Devices>
-#Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-#The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
+#Copyright 2021 <Analog Devices>
 import re
 import sys
 from os import listdir
@@ -15,14 +11,11 @@ import argparse
 import time
 import random
 import numpy as np
-import matplotlib.pyplot as plt
 #from multiprocessing import Process
 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
-#import subprocess
 import runspice
 from ltcsimraw import ltcsimraw as ltcsimraw
-#from steptable import StepTable
 from spifile import SpiFile as SpiFile
 
 def distribute_pds(start_attach_point, end_attach_point, n_pds, separation_min):
@@ -30,30 +23,29 @@ def distribute_pds(start_attach_point, end_attach_point, n_pds, separation_min):
     #it has to be within ((n_pds/2 + 1)) * separation_min from the front and back
     #of the cable
     attach_points = []
-
     
     #choose a 'half_point' which is a random location on the mixing segment 
     #where half of the PDs are to the right and half of the PDs are to the left
     #save room for the N/2 pds at the start and end of the mixing segment if
     #there is more than 1 pd
 
-    #print( "\nNumber of PDs = %d" % n_pds)
+    #print "\nNumber of PDs = %d" % n_pds
     if(n_pds % 2):
-        #print( "odd number of PDs")
+        #print "odd number of PDs"
         start = int((start_attach_point + ((n_pds+1)/2)*separation_min))
         end   = int((end_attach_point   - ((n_pds+1)/2)*separation_min))
         #when down to the last placement, min and max might switch places
         #the random number generator does not like this, so get them sorted out
         start = min(start,end)
         end   = max(start,end)
-        #print( "Start  %d" % start)
-        #print( "End    %d" % end)
-        #print( "N_pds  %d" % n_pds)
+        #print "Start  %d" % start
+        #print "End    %d" % end
+        #print "N_pds  %d" % n_pds
         if(start == end):
             half_point = start
         else:
             half_point   = random.randrange(start, end, 1)
-        #print( "Attach %d" % half_point)
+        #print "Attach %d" % half_point
         n_pds -= 1
         if(n_pds > 1):
             attach_points.extend(distribute_pds(start_attach_point, half_point, n_pds/2, separation_min))
@@ -66,17 +58,17 @@ def distribute_pds(start_attach_point, end_attach_point, n_pds, separation_min):
     else: #must be 2 or more pds to get here
         start = int((start_attach_point + ((n_pds)/2)*separation_min))
         end   = int((end_attach_point   - ((n_pds)/2)*separation_min))
-        #print( "Start  %d" % start)
-        #print( "End    %d" % end)
-        #print( "N_pds  %d" % n_pds)
+        #print "Start  %d" % start
+        #print "End    %d" % end
+        #print "N_pds  %d" % n_pds
         half_point   = random.randrange(start, end, 1)
-        #print( "Half   %d" % half_point)
+        #print "Half   %d" % half_point
 
         attach_points.extend(distribute_pds(start_attach_point, half_point, n_pds/2, separation_min))
         attach_points.extend(distribute_pds(half_point,   end_attach_point, n_pds/2, separation_min))
 
 
-    #print( attach_points)
+    #print attach_points
     return attach_points
 
 if __name__ == '__main__':
@@ -100,13 +92,6 @@ if __name__ == '__main__':
     separation_min = 0.1 #meters
     drop_max = 0.5 #meters
 
-    #containers to hold output data for plotting
-    fig, (ax1, ax2) = plt.subplots(2,1)  # Create a figure and an axes.
-
-    frequency = []
-    s11_plot  = []
-    s21_plot  = []
-
     #attach points are the node numbers 
     attach_points=distribute_pds(0,length*segs_per_meter, n_pds, 1)
     #attach_points=[3,455,458,461,464,467,470,473,476,479,482,485,488,491,494,497,500]
@@ -114,7 +99,6 @@ if __name__ == '__main__':
     #attach_points=[1000]
     
     for a in range(0,len(attach_points)+1):
-    #for a in range(0,2):
     #if(True):
         #a=len(attach_points)
         attach_points_x = attach_points[0:a]
@@ -143,7 +127,7 @@ if __name__ == '__main__':
                 cable.write("*PD %02d - attach at %.3f meters with %.3f meter drop\n" % \
                         (npd, pd/segs_per_meter, ndrop / segs_per_meter))
 
-                print("*PD %02d - attach at %.3f meters with %.3f meter drop" % \
+                print ("*PD %02d - attach at %.3f meters with %.3f meter drop" % \
                         (npd, pd/float(segs_per_meter), ndrop / float(segs_per_meter)))
 
                 for i in range(0,ndrop):
@@ -175,7 +159,7 @@ if __name__ == '__main__':
             zcable.write("rrnn refn 0 50\n")
 
             #simulation command
-            zcable.write(".ac lin 200 1meg 40meg\n")
+            zcable.write(".ac lin 500 1meg 100meg\n")
 
             #this .net expression isn't helping anymore, the s-parameters are being calculated from phasors
             #in the .ac output
@@ -332,39 +316,39 @@ if __name__ == '__main__':
         logSave  = os.path.join("data",design_md5,design_md5+".log")
         rawSave  = os.path.join("data",design_md5,design_md5+".raw")
         outputdb = os.path.join("data",design_md5)
-        print( design_md5)
+        print design_md5
         if not os.path.exists("data"):
-            print( "Data Folder does not exist")
-            print( "Creating...." )
+            print "Data Folder does not exist"
+            print "Creating...." 
             try:
                 os.makedirs("data")
             except:
-                print( "Cannot create data folder")
+                print "Cannot create data folder"
                 exit(1)
 
         if not os.path.exists(outputdb):
-            print( "Regression Folder %s does not exist" % design_md5)
-            print( "Creating...." )
+            print "Regression Folder %s does not exist" % design_md5
+            print "Creating...." 
             try:
                 os.makedirs(outputdb)
                 spi.outputToFile(spiSave)
             except:
-                print( "Cannot create regression folder")
+                print "Cannot create regression folder"
                 exit(1)
 
         #if there is already raw and log data in the md5 directory then assume the sim has 
         #already been run, otherwise run the sim
         try:
             open(spiSave,"r")
-            print( spiSave)
+            print spiSave
             open(logSave,"r")
-            print( logSave)
+            print logSave
             open(rawSave,"r")
-            print( rawSave)
-            print( "Pulling Sim From database")
+            print rawSave
+            print "Pulling Sim From database"
 
         except:
-            print( "Running Simulation")
+            print "Running Simulation"
             runspice.runspice(spiSave)
 
         #determine the node names for the end of the cable
@@ -375,17 +359,12 @@ if __name__ == '__main__':
         rf=ltcsimraw(rawSave)
         (data, labels) = rf.getSignals(["p0000","n0000", endp, endn],["rp", "rend_term"],["S11(vac)", "s21(vac)"])
 
-
-        #print( the s-parameters in a .csv file)
-
+        #print the s-parameters in a .csv file
         with open(csvFile, 'a') as zcable:
             zcable.write("#freq, s11_mag, s21_mag, s11_mp_mag, s21_mp_mag\n")
-            f = []
-            s1 = []
-            s2 = []
             for x in data:
-                #print( x[1] )
-                #print( x[2] )
+                #print x[1] 
+                #print x[2] 
                 s11  = rf.decodeComplex(x[7])
                 s21 =  rf.decodeComplex(x[8])
 
@@ -407,25 +386,5 @@ if __name__ == '__main__':
                 zcable.write("%.12g, %.12g, %.12g, %.12g, %.12g\n" % (
                         x[0], s11[0], s21[0], s11_mp[0], s21_mp[0]
                         ))
-                f.append(x[0])
-                s1.append(s11_mp[0])
-                s2.append(s21_mp[0])
             zcable.write("\n\n")
-        frequency.append(f)
-        s11_plot.append(s1)
-        s21_plot.append(s2)
-        print(labels)
-
-    for i,p in enumerate(frequency):
-        ax1.plot(frequency[i], s11_plot[i], label="%d" % i)  # Plot more data on the axes...
-        ax2.plot(frequency[i], s21_plot[i], label="%d" % i)  # Plot more data on the axes...
-    ax1.set_ylabel('RL s11 (dB)')  # Add an x-label to the axes.
-    ax1.set_xlim([0,40e6])
-    ax1.set_ylim([-50,0])
-
-    ax2.set_ylabel('IL s21 (dB)')  # Add an x-label to the axes.
-    ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
-    ax2.set_xlim([0,40e6])
-    ax2.set_ylim([-10,0])
-    #ax1.legend()  # Add a legend.
-    plt.show()
+        print labels

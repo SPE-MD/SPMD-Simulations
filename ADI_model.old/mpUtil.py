@@ -1,9 +1,4 @@
-#! /usr/bin/python3
-
-#Copyright  2021 <Analog Devices>
-#Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-#The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#! /usr/bin/python
 
 
 import re
@@ -16,27 +11,27 @@ def decodeEngineeringNotation(num):
         mult = m.group(3)
         num = float(m.group(1))
         multiplier = 1
-        if   mult == 'f' :
+        if   mult is 'f' :
             multiplier = 1e-15
-        elif mult == 'p' :
+        elif mult is 'p' :
             multiplier = 1e-12
-        elif mult == 'n' :
+        elif mult is 'n' :
             multiplier = 1e-09
-        elif mult == 'u' :
+        elif mult is 'u' :
             multiplier = 1e-06
-        elif mult == 'm' :
+        elif mult is 'm' :
             multiplier = 1e-03
-        elif mult == ' ' :
+        elif mult is ' ' :
             multiplier = 1e0
-        elif mult == 'k' :
+        elif mult is 'k' :
             multiplier = 1e3
-        elif mult == 'M' :
+        elif mult is 'M' :
             multiplier = 1e6
-        elif mult == 'G' :
+        elif mult is 'G' :
             multiplier = 1e9
-        elif mult == 'T' :
+        elif mult is 'T' :
             multiplier = 1e12
-        elif mult == 'P' :
+        elif mult is 'P' :
             multiplier = 1e15
 
         num = multiplier * num
@@ -51,7 +46,7 @@ def toEngineeringNotation(num):
         m = re.match('[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?',num)
         if(m):
             num = float(num)
-            print( num)
+            print num
         else:
             return num
     
@@ -59,7 +54,7 @@ def toEngineeringNotation(num):
     if(num == 0):
         return refdes % (num, "")
 
-    #print( self.num)
+    #print self.num
     size = 6;
     precision = 3
     power = math.log10(abs(num))
@@ -127,7 +122,7 @@ def aoaPrint(aoa):
         line = ""
         for col in row:
             line = line + col + " "
-        print( line)
+        print line
 
 def aoa2csv(aoa):
     output = ""
@@ -207,7 +202,7 @@ def errorPrint(refdes,message):
     normCode = "\x1b[0m";
     #colorCode = "\e[1;31m"; #linux/pi style
     string = colorCode+msg+normCode
-    print( string)
+    print string
 
 def warningPrint(refdes,message):
     msg = refdes % message
@@ -216,7 +211,7 @@ def warningPrint(refdes,message):
     normCode = "\x1b[0m";
     #colorCode = "\e[1;31m"; #linux/pi style
     string = colorCode+msg+normCode
-    print( string)
+    print string
 
 
 #30 black
