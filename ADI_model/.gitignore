@@ -2,15 +2,17 @@
 data/
 zcable*
 cable.p
-
+*.plot
 
 #LT Spice Specific Ignores
 *.raw
 *.cir
 *.spi
+*.plt
 
 #VI Swap Files
 *.swp
+*.swo
 
 #Standard Python .gitignore template below
 # Byte-compiled / optimized / DLL files

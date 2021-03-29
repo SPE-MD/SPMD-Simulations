@@ -15,6 +15,7 @@ import argparse
 import time
 import random
 import numpy as np
+import matplotlib.pyplot as plt
 #from multiprocessing import Process
 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
@@ -99,6 +100,13 @@ if __name__ == '__main__':
     separation_min = 0.1 #meters
     drop_max = 0.5 #meters
 
+    #containers to hold output data for plotting
+    fig, (ax1, ax2) = plt.subplots(2,1)  # Create a figure and an axes.
+
+    frequency = []
+    s11_plot  = []
+    s21_plot  = []
+
     #attach points are the node numbers 
     attach_points=distribute_pds(0,length*segs_per_meter, n_pds, 1)
     #attach_points=[3,455,458,461,464,467,470,473,476,479,482,485,488,491,494,497,500]
@@ -106,6 +114,7 @@ if __name__ == '__main__':
     #attach_points=[1000]
     
     for a in range(0,len(attach_points)+1):
+    #for a in range(0,2):
     #if(True):
         #a=len(attach_points)
         attach_points_x = attach_points[0:a]
@@ -166,7 +175,7 @@ if __name__ == '__main__':
             zcable.write("rrnn refn 0 50\n")
 
             #simulation command
-            zcable.write(".ac lin 500 1meg 100meg\n")
+            zcable.write(".ac lin 200 1meg 40meg\n")
 
             #this .net expression isn't helping anymore, the s-parameters are being calculated from phasors
             #in the .ac output
@@ -366,9 +375,14 @@ if __name__ == '__main__':
         rf=ltcsimraw(rawSave)
         (data, labels) = rf.getSignals(["p0000","n0000", endp, endn],["rp", "rend_term"],["S11(vac)", "s21(vac)"])
 
+
         #print( the s-parameters in a .csv file)
+
         with open(csvFile, 'a') as zcable:
             zcable.write("#freq, s11_mag, s21_mag, s11_mp_mag, s21_mp_mag\n")
+            f = []
+            s1 = []
+            s2 = []
             for x in data:
                 #print( x[1] )
                 #print( x[2] )
@@ -393,5 +407,25 @@ if __name__ == '__main__':
                 zcable.write("%.12g, %.12g, %.12g, %.12g, %.12g\n" % (
                         x[0], s11[0], s21[0], s11_mp[0], s21_mp[0]
                         ))
+                f.append(x[0])
+                s1.append(s11_mp[0])
+                s2.append(s21_mp[0])
             zcable.write("\n\n")
-        print( labels)
+        frequency.append(f)
+        s11_plot.append(s1)
+        s21_plot.append(s2)
+        print(labels)
+
+    for i,p in enumerate(frequency):
+        ax1.plot(frequency[i], s11_plot[i], label="%d" % i)  # Plot more data on the axes...
+        ax2.plot(frequency[i], s21_plot[i], label="%d" % i)  # Plot more data on the axes...
+    ax1.set_ylabel('RL s11 (dB)')  # Add an x-label to the axes.
+    ax1.set_xlim([0,40e6])
+    ax1.set_ylim([-50,0])
+
+    ax2.set_ylabel('IL s21 (dB)')  # Add an x-label to the axes.
+    ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
+    ax2.set_xlim([0,40e6])
+    ax2.set_ylim([-10,0])
+    #ax1.legend()  # Add a legend.
+    plt.show()
