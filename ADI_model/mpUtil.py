@@ -16,27 +16,27 @@ def decodeEngineeringNotation(num):
         mult = m.group(3)
         num = float(m.group(1))
         multiplier = 1
-        if   mult == 'f' :
+        if   mult is 'f' :
             multiplier = 1e-15
-        elif mult == 'p' :
+        elif mult is 'p' :
             multiplier = 1e-12
-        elif mult == 'n' :
+        elif mult is 'n' :
             multiplier = 1e-09
-        elif mult == 'u' :
+        elif mult is 'u' :
             multiplier = 1e-06
-        elif mult == 'm' :
+        elif mult is 'm' :
             multiplier = 1e-03
-        elif mult == ' ' :
+        elif mult is ' ' :
             multiplier = 1e0
-        elif mult == 'k' :
+        elif mult is 'k' :
             multiplier = 1e3
-        elif mult == 'M' :
+        elif mult is 'M' :
             multiplier = 1e6
-        elif mult == 'G' :
+        elif mult is 'G' :
             multiplier = 1e9
-        elif mult == 'T' :
+        elif mult is 'T' :
             multiplier = 1e12
-        elif mult == 'P' :
+        elif mult is 'P' :
             multiplier = 1e15
 
         num = multiplier * num
