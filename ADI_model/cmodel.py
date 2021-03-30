@@ -32,6 +32,8 @@ def distribute_pds(start_attach_point, end_attach_point, n_pds, separation_min):
     #it has to be within ((n_pds/2 + 1)) * separation_min from the front and back
     #of the cable
     attach_points = []
+    if n_pds <=0:
+        return []
 
     
     #choose a 'half_point' which is a random location on the mixing segment 
@@ -125,7 +127,8 @@ if __name__ == '__main__':
         pass
 
     parser = argparse.ArgumentParser(
-        description='extract data from an ltspice .raw file'
+        description='802.3da network model generator',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
         )
 
     parser.add_argument('--nodes', type=int, \
@@ -145,17 +148,23 @@ if __name__ == '__main__':
             default=20
             )
 
-    parser.add_argument('--drop_length', type=float, \
+    parser.add_argument('--drop_max', type=float, \
             help='Drop length between mixing segment and PD attachment in\
             meters.  This number will be rounded to an interger number of\
             segments per meter',
             default=0.5
             )
 
+    parser.add_argument('--random_drop',
+            action='store_true',\
+            help='Minimum separation between nodes in meters.  This number will\
+            be rounded to an integer number of segments per meter',\
+            )
+
     parser.add_argument('--separation_min', type=float, \
             help='Minimum separation between nodes in meters.  This number will\
             be rounded to an integer number of segments per meter',\
-            default=0.1\
+            default=1.0\
             )
 
     parser.add_argument('--seed', type=int, \
@@ -163,6 +172,15 @@ if __name__ == '__main__':
             default=-1
             )
 
+    parser.add_argument('--tx_node', type=int, \
+            help='Set the transmitter node, default is tx at the start of the cable.\
+            (not implemented yet)',
+            default=0
+            )
+
+    parser.add_argument('--noplot', action='store_true', help='set this flag to\
+            prevent plotting')
+    
     args = parser.parse_args()
 
     
@@ -188,17 +206,22 @@ if __name__ == '__main__':
     max_segs = int(segs_per_meter * length)
     n_pds = args.nodes
     separation_min = args.separation_min
-    drop_max = args.drop_length
+    drop_max = args.drop_max
     ndrop = int(drop_max * segs_per_meter)
+    nsep = int(separation_min * segs_per_meter)
+    print(ndrop)
+    print(nsep)
 
     #containers to hold output data for plotting
-    fig, (ax1, ax2) = plt.subplots(2,1)  # Create a figure and an axes.
+    fig, (ax1, ax2, ax3) = plt.subplots(3,1, figsize=(9, 9))  # Create a figure and an axes.
     frequency = []
     s11_plot  = []
     s21_plot  = []
+    plot_attach = []
+    plot_drop = []
 
     #attach points are the node numbers 
-    attach_points=distribute_pds(0,length*segs_per_meter, n_pds, 1)
+    attach_points=distribute_pds(0,length*segs_per_meter, n_pds, nsep)
     #attach_points=[3,455,458,461,464,467,470,473,476,479,482,485,488,491,494,497,500]
     #attach_points=[12,832,844,856,868,880,892,904,916,928,940,952,964,976,988,1000]
     #attach_points=[1000]
@@ -229,21 +252,40 @@ if __name__ == '__main__':
             npd=0
             for pd in attach_points_x:
                 npd+=1
-                cable.write("*PD %02d - attach at %.3f meters with %.3f meter drop\n" % \
-                        (npd, pd/segs_per_meter, ndrop / segs_per_meter))
 
-                print("*PD %02d - attach at %.3f meters with %.3f meter drop" % \
-                        (npd, pd/float(segs_per_meter), ndrop / float(segs_per_meter)))
+                #randomize drop lengths
+                if args.random_drop:
+                    ndrop_x = random.randint(0, ndrop)
+                else:
+                    ndrop_x = ndrop
 
-                for i in range(0,ndrop):
+                #print attachment information
+                att = "*PD %02d - attach at %.3f meters with %.3f meter drop" % \
+                        (npd, pd/float(segs_per_meter), ndrop_x / float(segs_per_meter))
+                cable.write("%s\n" % att)
+                print(att)
+
+                #keep track of attachment and drop for plotting later
+                plot_attach.append(pd/float(segs_per_meter))
+                if(npd % 2 == 0):
+                    plot_drop.append(-1 * ndrop_x / float(segs_per_meter))
+                else:
+                    plot_drop.append(ndrop_x / float(segs_per_meter))
+
+                i=-1 #need to define i=-1 here incase ndrop_x=0
+                for i in range(0,ndrop_x):
                     if i==0:
                         cable.write("Xseg%04d_%04d p%04d n%04d p%04d_%04d n%04d_%04d 0 tlump\n" %\
                                         (pd, i, pd, pd, pd, i+1, pd, i+1)) 
                     else:
                         cable.write("Xseg%04d_%04d p%04d_%04d n%04d_%04d p%04d_%04d n%04d_%04d 0 tlump\n" %\
                                         (pd, i, pd, i, pd, i, pd, i+1, pd, i+1)) 
-                cable.write("rpdp%04d p%04d_%04d pdp_%04d 0.010\n" % (pd, pd, i+1, npd))
-                cable.write("rpdn%04d n%04d_%04d pdn_%04d 0.010\n" % (pd, pd, i+1, npd))
+                if(ndrop_x == 0):
+                    cable.write("rpdp%04d p%04d pdp_%04d 0.010\n" % (pd, pd, npd))
+                    cable.write("rpdn%04d n%04d pdn_%04d 0.010\n" % (pd, pd, npd))
+                else:
+                    cable.write("rpdp%04d p%04d_%04d pdp_%04d 0.010\n" % (pd, pd, i+1, npd))
+                    cable.write("rpdn%04d n%04d_%04d pdn_%04d 0.010\n" % (pd, pd, i+1, npd))
                 cable.write("xpd%04d pdp_%04d pdn_%04d 0 pd\n" % (npd, npd, npd))
 
         with open("zcable.ac.cir", 'w') as zcable:
@@ -505,23 +547,48 @@ if __name__ == '__main__':
         s21_plot.append(s2)
         #print(labels)
 
-    rl_limit = return_loss_limit(frequency[0])
-    il_limit = insertion_loss_limit(frequency[0])
-    for i,p in enumerate(frequency):
-        ax1.plot(frequency[i], s11_plot[i], label="%d" % i)  # Plot more data on the axes...
-        ax2.plot(frequency[i], s21_plot[i], label="%d" % i)  # Plot more data on the axes...
+    if not args.noplot:
+        rl_limit = return_loss_limit(frequency[0])
+        il_limit = insertion_loss_limit(frequency[0])
+        for i,p in enumerate(frequency):
+            ax1.plot(frequency[i], s11_plot[i], label="test")  # Plot more data on the axes...
+            ax2.plot(frequency[i], s21_plot[i], label="test")  # Plot more data on the axes...
+            #ax1.plot(frequency[i], s11_plot[i])  # Plot more data on the axes...
+            #ax2.plot(frequency[i], s21_plot[i])  # Plot more data on the axes...
 
-    ax1.plot(frequency[0], rl_limit, label="limit")  # Plot more data on the axes...
-    ax2.plot(frequency[0], il_limit, label="limit")  # Plot more data on the axes...
-    ax1.set_ylabel('RL s11 (dB)')  # Add an x-label to the axes.
-    ax1.set_xlim([0,40e6])
-    #ax1.set_ylim([-50,0])
+        ax1.plot(frequency[0], rl_limit, label="limit")  # Plot more data on the axes...
+        ax2.plot(frequency[0], il_limit, label="limit")  # Plot more data on the axes...
+        ax1.set_ylabel('RL s11 (dB)')  # Add an x-label to the axes.
+        ax1.set_xlim([0,40e6])
+        #ax1.set_ylim([-50,0])
 
-    ax2.set_ylabel('IL s21 (dB)')  # Add an x-label to the axes.
-    ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
-    ax2.set_xlim([0,40e6])
-    #ax2.set_ylim([-40,0])
-    #ax1.legend()  # Add a legend.
-    plt.show()
-    print("#Seed: %d" % seed)
-    print("#Close plot window to continue")
+        ax2.set_ylabel('IL s21 (dB)')  # Add an x-label to the axes.
+        ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
+        ax2.set_xlim([0,40e6])
+        #ax2.set_ylim([-40,0])
+        ax1.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
+
+        ax3.set_xlim([-1,int(args.length)+1])
+        ax3.set_ylim([-1,1])
+        ax3.set_xlabel('Attach (m)')  # Add a x-label to the axes.
+        ax3.set_ylabel('Drop (m)')  # Add a x-label to the axes.
+
+        #mixing segment line
+        ax3.plot([0,args.length],[0,0], color="k")
+        ax3.plot(plot_attach, np.zeros_like(plot_attach), "-o", color="k", markerfacecolor="w")
+
+        #drop lines
+        ax3.vlines(plot_attach, 0, plot_drop, color="tab:red")
+
+        #text annotation
+        #ax3.annotate(
+        #     'N1'
+        #     , xy=(10, 0)
+        #     , xytext=(10, -0.5)
+        #     , xycoords='data'
+        #     , va='top'
+        #     ) 
+
+        plt.show()
+        #print("#Seed: %d" % seed)
+        print("#Close plot window to continue")
