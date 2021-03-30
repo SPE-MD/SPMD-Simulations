@@ -93,7 +93,7 @@ class SpiFile(object):
                 self.includeFiles.append(ln[1])
                 isCirFile = ln[1].endswith(".cir")
                 if(self.followInclude or isCirFile):
-                    print( "FOLLOWING %s" % ln[1])
+                    #print( "FOLLOWING %s" % ln[1])
                     inc = self._followInclude(self.joined[-1])
                     self.joined.pop()
                     self.joined.extend(inc)
@@ -103,7 +103,7 @@ class SpiFile(object):
     def _followInclude(self,line):
         #print( self.spifile)
         #print( line)
-        print( os.path.abspath(self.spifile))
+        #print( os.path.abspath(self.spifile))
         dir = os.path.dirname(os.path.abspath(self.spifile))
         ln = line.split()
         inc = ln[1]

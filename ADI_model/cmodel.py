@@ -15,7 +15,9 @@ import argparse
 import time
 import random
 import numpy as np
+import math
 import matplotlib.pyplot as plt
+import datetime
 #from multiprocessing import Process
 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
@@ -79,14 +81,102 @@ def distribute_pds(start_attach_point, end_attach_point, n_pds, separation_min):
     #print( attach_points)
     return attach_points
 
+def return_loss_limit(freq):
+    rl=[]
+    for x in freq:
+        rl.append(_rl(x))
+    return rl
+
+def _rl(x):
+    if(x < 0.3e6):
+        return np.nan 
+    elif(x < 10e6):
+        return -14 
+    elif(x < 40e6):
+        return -1*(14 - 10 * math.log10(x / 10e6))
+    else:
+        return np.nan
+
+def insertion_loss_limit(freq):
+    il=[]
+    for x in freq:
+        il.append(_il(x))
+    return il
+
+
+def _il(x):
+
+    if(x < 0.3e6):
+        return np.nan 
+    elif(x < 10e6):
+        return -1*(1.0 + (1.6 * (x -  1e6)  / 9e6))
+    elif(x < 33e6):
+        return -1*(2.6 + (2.3 * (x - 10e6) / 23e6))
+    elif(x < 40e6):
+        return -1*(4.9 + (2.3 * (x - 33e6) / 33e6))
+    else:
+        return np.nan
+
+
 if __name__ == '__main__':
     csvFile = os.path.join("zcable.csv")
     with open(csvFile, 'w') as csv:
         #delete the csvFile.  It gets filled up in append mode later...
         pass
-    seed = random.seed()
-    length = 50       #meters
-    segs_per_meter=20 #finite element lump size
+
+    parser = argparse.ArgumentParser(
+        description='extract data from an ltspice .raw file'
+        )
+
+    parser.add_argument('--nodes', type=int, \
+            help='Set the number of nodes in the simulation', \
+            default=16
+            )
+
+    parser.add_argument('--length', type=float, \
+            help='Mixing segment length in meters, will be rounded to an integer\
+            number of segments per meter',\
+            default=50
+            )
+
+    parser.add_argument('--segments_per_meter', type=int, \
+            help='Size of finite element cable model segments.  Be sure this\
+            lines up with lump models',\
+            default=20
+            )
+
+    parser.add_argument('--drop_length', type=float, \
+            help='Drop length between mixing segment and PD attachment in\
+            meters.  This number will be rounded to an interger number of\
+            segments per meter',
+            default=0.5
+            )
+
+    parser.add_argument('--separation_min', type=float, \
+            help='Minimum separation between nodes in meters.  This number will\
+            be rounded to an integer number of segments per meter',\
+            default=0.1\
+            )
+
+    parser.add_argument('--seed', type=int, \
+            help='Seed value for random number generator',\
+            default=-1
+            )
+
+    args = parser.parse_args()
+
+    
+    seed = args.seed
+    if seed == -1:
+        tim = datetime.datetime.now()
+        seed = tim.hour*10000+tim.minute*100+tim.second
+        random.seed(seed)
+    else:
+        random.seed(seed)
+    print("#Random Seed = %s" % seed)
+
+    length = args.length       #meters
+    segs_per_meter=args.segments_per_meter #finite element lump size
     tpd=3.335e-9      #speed of light on this cable
     z0 = 100          #cable impedance
     l_m = tpd * z0               #inductance per meter
@@ -96,13 +186,13 @@ if __name__ == '__main__':
     clump = c_m / segs_per_meter
     rlump = r_m / segs_per_meter 
     max_segs = int(segs_per_meter * length)
-    n_pds = 10
-    separation_min = 0.1 #meters
-    drop_max = 0.5 #meters
+    n_pds = args.nodes
+    separation_min = args.separation_min
+    drop_max = args.drop_length
+    ndrop = int(drop_max * segs_per_meter)
 
     #containers to hold output data for plotting
     fig, (ax1, ax2) = plt.subplots(2,1)  # Create a figure and an axes.
-
     frequency = []
     s11_plot  = []
     s21_plot  = []
@@ -110,14 +200,14 @@ if __name__ == '__main__':
     #attach points are the node numbers 
     attach_points=distribute_pds(0,length*segs_per_meter, n_pds, 1)
     #attach_points=[3,455,458,461,464,467,470,473,476,479,482,485,488,491,494,497,500]
-    attach_points=[12,832,844,856,868,880,892,904,916,928,940,952,964,976,988,1000]
+    #attach_points=[12,832,844,856,868,880,892,904,916,928,940,952,964,976,988,1000]
     #attach_points=[1000]
     
-    for a in range(0,len(attach_points)+1):
+    #for a in range(0,len(attach_points)+1):
     #for a in range(0,2):
-    #if(True):
-        #a=len(attach_points)
-        attach_points_x = attach_points[0:a]
+        #attach_points_x = attach_points[0:a]
+    if(True):
+        attach_points_x = attach_points
         with open("cable.p", 'w') as cable:
 
             cable.write("*lumped transmission line model with %d segments per meter at %d meters\n"\
@@ -137,7 +227,6 @@ if __name__ == '__main__':
             cable.write("***** PD ATTACHMENTS *****\n")
             cable.write("**************************\n")
             npd=0
-            ndrop=6
             for pd in attach_points_x:
                 npd+=1
                 cable.write("*PD %02d - attach at %.3f meters with %.3f meter drop\n" % \
@@ -332,7 +421,7 @@ if __name__ == '__main__':
         logSave  = os.path.join("data",design_md5,design_md5+".log")
         rawSave  = os.path.join("data",design_md5,design_md5+".raw")
         outputdb = os.path.join("data",design_md5)
-        print( design_md5)
+        #print( design_md5)
         if not os.path.exists("data"):
             print( "Data Folder does not exist")
             print( "Creating...." )
@@ -356,11 +445,11 @@ if __name__ == '__main__':
         #already been run, otherwise run the sim
         try:
             open(spiSave,"r")
-            print( spiSave)
+            #print( spiSave)
             open(logSave,"r")
-            print( logSave)
+            #print( logSave)
             open(rawSave,"r")
-            print( rawSave)
+            #print( rawSave)
             print( "Pulling Sim From database")
 
         except:
@@ -414,18 +503,25 @@ if __name__ == '__main__':
         frequency.append(f)
         s11_plot.append(s1)
         s21_plot.append(s2)
-        print(labels)
+        #print(labels)
 
+    rl_limit = return_loss_limit(frequency[0])
+    il_limit = insertion_loss_limit(frequency[0])
     for i,p in enumerate(frequency):
         ax1.plot(frequency[i], s11_plot[i], label="%d" % i)  # Plot more data on the axes...
         ax2.plot(frequency[i], s21_plot[i], label="%d" % i)  # Plot more data on the axes...
+
+    ax1.plot(frequency[0], rl_limit, label="limit")  # Plot more data on the axes...
+    ax2.plot(frequency[0], il_limit, label="limit")  # Plot more data on the axes...
     ax1.set_ylabel('RL s11 (dB)')  # Add an x-label to the axes.
     ax1.set_xlim([0,40e6])
-    ax1.set_ylim([-50,0])
+    #ax1.set_ylim([-50,0])
 
     ax2.set_ylabel('IL s21 (dB)')  # Add an x-label to the axes.
     ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
     ax2.set_xlim([0,40e6])
-    ax2.set_ylim([-10,0])
+    #ax2.set_ylim([-40,0])
     #ax1.legend()  # Add a legend.
     plt.show()
+    print("#Seed: %d" % seed)
+    print("#Close plot window to continue")

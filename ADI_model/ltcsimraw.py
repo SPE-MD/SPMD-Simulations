@@ -87,10 +87,11 @@ class ltcsimraw():
         #If x64 is detected read the chars as 16 bits and throw away the 
         #trailing '\0'
         if self.x64==True:
-            print("Reading x64 file")
+            #print("Reading x64 file")
             nread=2
         else:
-            print("Reading x32 file")
+            pass
+            #print("Reading x32 file")
         while(keep_reading):
             r = file.read(nread)
             #print("r len: ", len(r))
@@ -102,7 +103,7 @@ class ltcsimraw():
                 pass
             else:
                 line += chr(r)
-        print(line)
+        #print(line)
         return line
 
     def readPreamble(self,file):

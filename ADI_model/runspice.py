@@ -44,16 +44,16 @@ def runLTspice(cirfile,executable,msgQueue):
     try:
         #if "win" in sys.platform and sys.platform is not "darwin":
         if sys.platform == "darwin":
-            print( "darwin")
+            #print( "darwin")
             exe = ' '.join(executable)
-            print( exe)
+            #print( exe)
             subprocess.call((exe) ,shell=True)
         elif "win" in sys.platform:
-            print( "windows")
+            #print( "windows")
 
             subprocess.call(executable, shell=True)
         elif "linux" in sys.platform:
-            print( "linux")
+            #print( "linux")
             if 'Microsoft' in platform.uname().release:
                 print ("Windows Subsystem for Linux")
                 exe = ' '.join(executable)
@@ -70,14 +70,16 @@ def runLTspice(cirfile,executable,msgQueue):
 
 def tail(logfile,pipe):
 
+    print( "waiting for log: %s\r" % logfile)
     while not os.path.isfile(logfile):
-        print( "waiting for log: %s\r" % logfile)
+        print( ".", end='', flush=True)
         if(pipe.poll()):
                     rcv = pipe.recv()
                     if(rcv == "Done"):
                         return
         time.sleep(0.4)
 
+    print("")
     f=open(logfile, "r")
 
     print( "following   %s" % logfile)
@@ -132,7 +134,7 @@ def makeNetlist(ascfile):
 
     """ for windows """
     windows = False
-    if sys.platform is "darwin":
+    if sys.platform == "darwin":
         pass
     elif "win" in sys.platform:
         windows = True
@@ -196,7 +198,7 @@ def runspice(cirfile,batch=True):
 
     """ for windows """
     windows = False
-    print( sys.platform)
+    #print( sys.platform)
     if sys.platform == "darwin":
         #exe = os.path.join("C:","Program\ Files","LTC","LTspiceXVII","XVIIx86.exe")
 
@@ -208,16 +210,16 @@ def runspice(cirfile,batch=True):
         scad = ['wine C:/Program\ Files/LTC/LTspiceXVII/XVIIx86.exe -wine -b']
         print( scad)
     elif "win" in sys.platform :
-        print( "Windows")
+        #print( "Windows")
         windows = True
         scad = [exe,'-b']
         if not batch:
             scad = [exe]
     elif "linux" in sys.platform :
         if 'Microsoft' in platform.uname().release:
-            print ("Windows Subsystem for Linux")
+            #print ("Windows Subsystem for Linux")
             exe = "/mnt/c/Program\ Files/LTC/LTspiceXVII/XVIIx64.exe"
-            print( "linux")
+            #print( "linux")
             windows = True
             scad = [exe,'-b']
             if not batch:
