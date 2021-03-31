@@ -174,15 +174,15 @@ if __name__ == '__main__':
             action='store_true',
             help='When set, nodes will attached at random locations on the mixing segment\
             after nodes specified by --start_attach and --end_attach flags have been added\
-            to the mixing segment (if any).  Node placements should be reproducable by reusing\
+            to the mixing segment (if any).  Node placements should be reproducible by reusing\
             the seed value from another sim (see the --seed flag)\
             Otherwise, nodes will be evenly distributed across the mixing segment between nodes\
             specified by --start_attach and --end_attach flags',
             )
 
     parser.add_argument('--start_attach', type=int, \
-            help='When start_attach > 0, nodes from start_attach on will be placed at\
-            the start of the mixing segment with \'separation_min\' spacing',
+            help='Specify an number of nodes to be placed at the start of the mixing\
+            segment with \'separation_min\' spacing',
             default=0
             )
 
