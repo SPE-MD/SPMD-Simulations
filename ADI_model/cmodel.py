@@ -29,8 +29,12 @@ from spifile import SpiFile as SpiFile
 
 def distribute_pds_even(start_attach_point, end_attach_point, n_pds, separation_min, tab=""):
     #there will be 1 separation between 2 pds, so subtract 1 from n_pds when calculating delta
-    delta = (end_attach_point - start_attach_point) / (n_pds - 1)
     attach_points = [] 
+    if n_pds==0:
+        return attach_points
+    if n_pds==1:
+        return [int((end_attach_point + start_attach_point)/2)]
+    delta = (end_attach_point - start_attach_point) / (n_pds - 1)
     for i in range(0,n_pds):
         attach_points.append(int(start_attach_point + (i * delta)))
     return attach_points
@@ -60,11 +64,11 @@ def distribute_pds_random(start_attach_point, end_attach_point, n_pds, separatio
         start = min(start_x,end_x)
         end   = max(start_x,end_x)
 
-        print( tab+"Satt   %d" % start_attach_point)
-        print( tab+"Eatt   %d" % end_attach_point)
-        print( tab+"Start  %d" % start)
-        print( tab+"End    %d" % end)
-        print( tab+"N_pds  %d" % n_pds)
+        #print( tab+"Satt   %d" % start_attach_point)
+        #print( tab+"Eatt   %d" % end_attach_point)
+        #print( tab+"Start  %d" % start)
+        #print( tab+"End    %d" % end)
+        #print( tab+"N_pds  %d" % n_pds)
         if(n_pds == 1):
             half_point   = random.randrange(start_attach_point, end_attach_point, 1)
         elif(start == end):
@@ -72,7 +76,7 @@ def distribute_pds_random(start_attach_point, end_attach_point, n_pds, separatio
         else:
             half_point   = random.randrange(start, end, 1)
 
-        print( tab+"Attach %d" % half_point)
+        #print( tab+"Attach %d" % half_point)
         n_pds -= 1
         if(n_pds > 1):
             attach_points.extend(distribute_pds_random(start_attach_point, half_point-separation_min, n_pds/2, separation_min, tab+"\t"))
@@ -86,13 +90,13 @@ def distribute_pds_random(start_attach_point, end_attach_point, n_pds, separatio
         start = int((start_attach_point + ((n_pds)/2)*separation_min))
         end   = int((end_attach_point   - ((n_pds)/2)*separation_min))
 
-        print( tab+"Satt   %d" % start_attach_point)
-        print( tab+"Eatt   %d" % end_attach_point)
-        print( tab+"Start  %d" % start)
-        print( tab+"End    %d" % end)
-        print( tab+"N_pds  %d" % n_pds)
+        #print( tab+"Satt   %d" % start_attach_point)
+        #print( tab+"Eatt   %d" % end_attach_point)
+        #print( tab+"Start  %d" % start)
+        #print( tab+"End    %d" % end)
+        #print( tab+"N_pds  %d" % n_pds)
         half_point   = random.randrange(start, end, 1)
-        print( tab+"Half   %d" % half_point)
+        #print( tab+"Half   %d" % half_point)
 
         attach_points.extend(distribute_pds_random(start_attach_point, half_point, n_pds/2, separation_min, tab+"\t"))
         attach_points.extend(distribute_pds_random(half_point,   end_attach_point, n_pds/2, separation_min, tab+"\t"))
@@ -183,9 +187,9 @@ if __name__ == '__main__':
             )
 
     parser.add_argument('--end_attach', type=int, \
-            help='When end_attach < nodes, nodes from end_attach on will be placed at\
-            the end of the mixing segment with \'separation_min\' spacing',
-            default=1000
+            help='Specify an number of nodes to be placed at the end of the mixing\
+            segment with \'separation_min\' spacing',
+            default=0
             )
 
     parser.add_argument('--length', type=float, \
@@ -279,8 +283,8 @@ if __name__ == '__main__':
     end = []
     start = []
     if(args.end_attach):
-        if(args.end_attach <= unattached and args.start_attach > 0):
-            nend = unattached-args.end_attach+1
+        if(args.end_attach <= unattached and args.end_attach > 0):
+            nend = args.end_attach
             end = end_attach(attach_end, nend , nsep)
             unattached -= nend
             attach_end = end[0]-nsep
@@ -636,8 +640,8 @@ if __name__ == '__main__':
             #ax1.plot(frequency[i], s11_plot[i])  # Plot more data on the axes...
             #ax2.plot(frequency[i], s21_plot[i])  # Plot more data on the axes...
 
-        ax1.plot(frequency[0], rl_limit, label="limit")  # Plot more data on the axes...
-        ax2.plot(frequency[0], il_limit, label="limit")  # Plot more data on the axes...
+        ax1.plot(frequency[0], rl_limit, label="clause 147 limit")  # Plot more data on the axes...
+        ax2.plot(frequency[0], il_limit, label="clause 147 limit")  # Plot more data on the axes...
         ax1.set_ylabel('RL s11 (dB)')  # Add an x-label to the axes.
         ax1.set_xlim([0,40e6])
         #ax1.set_ylim([-50,0])
