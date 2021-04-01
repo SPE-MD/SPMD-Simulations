@@ -1,3 +1,14 @@
+#LT Spice Specific Ignores
+*.raw
+*.cir
+*.spi
+*.plt
+
+#VI Swap Files
+*.swp
+*.swo
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
