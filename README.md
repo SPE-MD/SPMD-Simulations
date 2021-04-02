@@ -1,5 +1,5 @@
 # SPMD-Simulations
-Repository to support simulations of mixing segments for single pair multi-drop networks.
+Repository to support simulations of mixing segments for single pair multi-drop networks to facilitate the selection of the proper mixing segment limits for IEEE 802.3da.
 
 ## Goals
 
@@ -9,7 +9,7 @@ The goal of these simulations is to provide a model which combines the best trai
 * Simple Time/Frequency Domain Simulation (Done)
 * Frequency Domain Simulation with Skin Effect (Done)
 * Time/Frequency Domain Simulation with Skin Effect (In Progress)
-* Fully Differention Time/Frequency Domain Simulation with Skin Effect (Planned)
+* Fully Differential Time/Frequency Domain Simulation with Skin Effect (Planned)
 
 ### Desired Input Parameter Features
 * Random topology generation (Done)
