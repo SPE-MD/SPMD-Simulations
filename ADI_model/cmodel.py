@@ -223,6 +223,21 @@ if __name__ == '__main__':
             default=1.0\
             )
 
+    parser.add_argument('--cnode', type=float, \
+            help='Node capacitance in Farads.  All nodes will be assigned this MDI interface capacitance',\
+            default=15e-12\
+            )
+
+    parser.add_argument('--lpodl', type=float, \
+            help='Node inducatnce in Henrys.  All nodes will be assigned this MDI interface inductance',\
+            default=80e-6\
+            )
+
+    parser.add_argument('--rnode', type=float, \
+            help='Node resistance in Ohms.  All nodes will be assigned this MDI interface resitance',\
+            default=10000\
+            )
+
     parser.add_argument('--seed', type=int, \
             help='Seed value for random number generator',\
             default=-1
@@ -237,6 +252,11 @@ if __name__ == '__main__':
     parser.add_argument('--noplot', action='store_true', help='set this flag to\
             prevent plotting')
     
+    parser.add_argument('--noautoscale', action='store_true',\
+            help='set this flag to lock the y-axis on IL/RL plots to -80dB/-70dB\
+            respectively.  The xaxis on the network model will be locked at -1m to 101m'
+            )
+ 
     args = parser.parse_args()
 
     
@@ -326,6 +346,9 @@ if __name__ == '__main__':
             cable.write(".param llump=%.6g\n" % llump)
             cable.write(".param rg=100e6\n")
             cable.write(".param rser=%.6g\n" % r_m)
+            cable.write(".param rnode=%.6g\n" % args.rnode)
+            cable.write(".param cnode=%.6g\n" % args.cnode)
+            cable.write(".param lpodl=%.6g\n" % args.lpodl)
 
             for seg in range(0,max_segs):
                 cable.write("Xseg%04d p%04d n%04d p%04d n%04d 0 tlump\n" % (seg, seg, seg, seg+1, seg+1)) 
@@ -576,7 +599,7 @@ if __name__ == '__main__':
             #print( logSave)
             open(rawSave,"r")
             #print( rawSave)
-            print( "Pulling Sim From database")
+            print( "Pulling Sim From database %s" % design_md5) 
 
         except:
             print( "Running Simulation")
@@ -631,48 +654,53 @@ if __name__ == '__main__':
         s21_plot.append(s2)
         #print(labels)
 
+    rl_limit = return_loss_limit(frequency[0])
+    il_limit = insertion_loss_limit(frequency[0])
+    for i,p in enumerate(frequency):
+        ax1.plot(frequency[i], s11_plot[i], label="test")  # Plot more data on the axes...
+        ax2.plot(frequency[i], s21_plot[i], label="test")  # Plot more data on the axes...
+        #ax1.plot(frequency[i], s11_plot[i])  # Plot more data on the axes...
+        #ax2.plot(frequency[i], s21_plot[i])  # Plot more data on the axes...
+
+    ax1.plot(frequency[0], rl_limit, label="clause 147 limit")  # Plot more data on the axes...
+    ax2.plot(frequency[0], il_limit, label="clause 147 limit")  # Plot more data on the axes...
+    ax1.set_ylabel('RL s11 (dB)')  # Add an x-label to the axes.
+    ax1.set_xlim([0,40e6])
+    if(args.noautoscale):
+        ax1.set_ylim([-70,0])
+
+    ax2.set_ylabel('IL s21 (dB)')  # Add an x-label to the axes.
+    ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
+    ax2.set_xlim([0,40e6])
+    if(args.noautoscale):
+        ax2.set_ylim([-20,0])
+    ax1.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
+
+    #ax3.set_xlim([-1,int(args.length)+1])
+    if(args.noautoscale):
+        ax3.set_xlim([-1,101])
+    ax3.set_ylim([-1,1])
+    ax3.set_xlabel('Attach (m)')  # Add a x-label to the axes.
+    ax3.set_ylabel('Drop (m)')  # Add a x-label to the axes.
+
+    #mixing segment line
+    ax3.plot([0,args.length],[0,0], color="k")
+    ax3.plot(plot_attach, np.zeros_like(plot_attach), "-o", color="k", markerfacecolor="w")
+
+    #drop lines
+    ax3.vlines(plot_attach, 0, plot_drop, color="tab:red")
+
+    #text annotation
+    #ax3.annotate(
+    #     'N1'
+    #     , xy=(10, 0)
+    #     , xytext=(10, -0.5)
+    #     , xycoords='data'
+    #     , va='top'
+    #     ) 
+
+    plt.savefig('zcable.png')
     if not args.noplot:
-        rl_limit = return_loss_limit(frequency[0])
-        il_limit = insertion_loss_limit(frequency[0])
-        for i,p in enumerate(frequency):
-            ax1.plot(frequency[i], s11_plot[i], label="test")  # Plot more data on the axes...
-            ax2.plot(frequency[i], s21_plot[i], label="test")  # Plot more data on the axes...
-            #ax1.plot(frequency[i], s11_plot[i])  # Plot more data on the axes...
-            #ax2.plot(frequency[i], s21_plot[i])  # Plot more data on the axes...
-
-        ax1.plot(frequency[0], rl_limit, label="clause 147 limit")  # Plot more data on the axes...
-        ax2.plot(frequency[0], il_limit, label="clause 147 limit")  # Plot more data on the axes...
-        ax1.set_ylabel('RL s11 (dB)')  # Add an x-label to the axes.
-        ax1.set_xlim([0,40e6])
-        #ax1.set_ylim([-50,0])
-
-        ax2.set_ylabel('IL s21 (dB)')  # Add an x-label to the axes.
-        ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
-        ax2.set_xlim([0,40e6])
-        #ax2.set_ylim([-40,0])
-        ax1.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
-
-        ax3.set_xlim([-1,int(args.length)+1])
-        ax3.set_ylim([-1,1])
-        ax3.set_xlabel('Attach (m)')  # Add a x-label to the axes.
-        ax3.set_ylabel('Drop (m)')  # Add a x-label to the axes.
-
-        #mixing segment line
-        ax3.plot([0,args.length],[0,0], color="k")
-        ax3.plot(plot_attach, np.zeros_like(plot_attach), "-o", color="k", markerfacecolor="w")
-
-        #drop lines
-        ax3.vlines(plot_attach, 0, plot_drop, color="tab:red")
-
-        #text annotation
-        #ax3.annotate(
-        #     'N1'
-        #     , xy=(10, 0)
-        #     , xytext=(10, -0.5)
-        #     , xycoords='data'
-        #     , va='top'
-        #     ) 
-
         plt.show()
         #print("#Seed: %d" % seed)
         print("#Close plot window to continue")

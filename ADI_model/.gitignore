@@ -1,8 +1,10 @@
 #ADI Model Specific Ignores
 data/
+gif/
 zcable*
 cable.p
 *.plot
+*.gif
 
 #LT Spice Specific Ignores
 *.raw
