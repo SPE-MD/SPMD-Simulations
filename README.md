@@ -26,6 +26,11 @@ The goal of these simulations is to provide a model which combines the best trai
 * Overlayed results from batch analysis (Planned)
 * Worst/Best case outcome extraction (Planned)
 
+### Desired Configurations to Test
+* Unloaded stubs
+* Measure RL/IL from station to station (currently term to term)
+* Dissimilar cables in trunk and in drop
+
 ## Simulation Tools
 
 Front end automation is via Python 3. Some packaged are required:
