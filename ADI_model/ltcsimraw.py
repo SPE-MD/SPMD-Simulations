@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 
-#Copyright  2021 <Analog Devices>
+#Copyright  2021 <Michael Paul>
 #Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 #The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 #THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -302,6 +302,53 @@ class ltcsimraw():
         #print( y)
         sig = self.getSignal(y)
         return (sig, labels)
+
+    def scattering_parameters(self, vport1, iport1, vport2, iport2, rin=50,
+            rout=50):
+        (data,labels) = self.getSignals([],[],[vport1[0],vport1[1],vport2[0],vport2[1],iport1,iport2])
+        index = dict(zip(labels, range(0,len(labels))))
+        #print(labels)
+        frequency=[]
+        s11=[]
+        s11_phase=[]
+        s21=[]
+        gain=[]
+        phase=[]
+        zin_mag=[]
+        zin_phase=[]
+        for x in data:
+            vend   = x[index[vport2[0]]]-x[index[vport2[1]]]
+            iend   = x[index[iport2]]
+            vin    = x[index[vport1[0]]]-x[index[vport1[1]]]
+            iin    = x[index[iport1]]
+            rin    = 50
+            rout   = 50
+            a1 = (vin + (iin*rin))
+            b1 = (vin - (iin*rin))
+            a2 = (vend + (iend*rout))
+            b2 = (vend - (iend*rout))
+            s11_mp  = self.decodeComplex(a1 / b1)
+            s21_mp  = self.decodeComplex(b2 / a1)
+            gain_mp = self.decodeComplex(vend/vin)
+            frequency.append(x[0])
+            s11.append(s11_mp[0])
+            s11_phase.append(s11_mp[1])
+            s21.append(s21_mp[0])
+            gain.append(gain_mp[0])
+            phase.append(gain_mp[1])
+            zin_mag.append(self.decodeComplex(vin/iin)[0])
+            zin_phase.append(self.decodeComplex(vin/iin)[1])
+
+        return {
+            "frequency" : frequency,
+            "s11" : s11,
+            "s11_phase" : s11_phase,
+            "s21" : s21,
+            "gain" : gain,
+            "phase" : phase,
+            "zin_mag" : zin_mag,
+            "zin_phase" : zin_phase,
+            }
 
     #changes the data from an aoa to an array of strings suitable for feeding to
     #gnuplot

@@ -46,35 +46,48 @@ pngfiles = []
 #            ])
 
 #change the drop length
-drop=0.10
-for i in range(15,30+1,1):
-    cnode = i * 1e-12
-    try:
-        command = ["python","cmodel.py"\
-            ,"--seed=144704"\
-            ,"--nodes=32"\
-            ,"--length=100"\
-            ,"--separation_min=1"\
-            ,"--drop_max=%.02f" % drop\
-            ,"--cnode=%.02g" % cnode\
-            ,"--noplot"\
-            ,"--noautoscale"\
-            ]
+d=0.0
+c=30
+n=16
+t=1
+#for i in range(15,30+1,1):
+#for d in range(0,50,5):
+#for d in range(0,50,5):
+#for n in range(2,16+1):
+for l in range(16,50):
+    for t in range(1,n+1):
+        cnode = c * 1e-12
+        drop = d/100
+        try:
+            command = ["python","system.py"\
+                ,"--seed=144704"\
+                ,"--nodes=%d" % n\
+                ,"--length=%f" % l\
+                ,"--separation_min=1"\
+                ,"--tx_node=%d" % t\
+                #,"--start_attach=1"\
+                #,"--end_attach=1"\
+                ,"--drop_max=%.02f" % drop\
+                ,"--cnode=%.02g" % cnode\
+                ,"--noplot"\
+                ,"--noautoscale"\
+                ]
 
-        print(" ".join(command))
-        subprocess.run(command)
-    except:
-        print( "Issue running simulation" )
-        exit(1)
+            print(" ".join(command))
+            subprocess.run(command)
+        except:
+            print( "Issue running simulation" )
+            exit(1)
 
-    try:
-        new_file = os.path.join("gif","frame_%d.png" % i)
-        shutil.move("zcable.png", new_file)
-    except:
-        print( "Issue copying file" )
-        exit(1)
+        try:
+            new_file = os.path.join("gif","frame_%d_%d.png" % (t, l))
+            shutil.move("zcable.png", new_file)
+        except Exception as e:
+            print( e )
+            print( "Issue copying image file" )
+            exit(1)
 
-    pngfiles.append(new_file)
+        pngfiles.append(new_file)
 
 #setup the gif loop to go forward, then backwards, and loop forever
 gif_file = 'zcable.gif'

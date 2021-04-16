@@ -27,95 +27,11 @@ from ltcsimraw import ltcsimraw as ltcsimraw
 #from steptable import StepTable
 from spifile import SpiFile as SpiFile
 
-def distribute_pds_even(start_attach_point, end_attach_point, n_pds, separation_min, tab=""):
-    #there will be 1 separation between 2 pds, so subtract 1 from n_pds when calculating delta
-    attach_points = [] 
-    if n_pds==0:
-        return attach_points
-    if n_pds==1:
-        return [int((end_attach_point + start_attach_point)/2)]
-    delta = (end_attach_point - start_attach_point) / (n_pds - 1)
-    for i in range(0,n_pds):
-        attach_points.append(int(start_attach_point + (i * delta)))
-    return attach_points
-
-def distribute_pds_random(start_attach_point, end_attach_point, n_pds, separation_min, tab=""):
-    #find where the 'center' pd should be
-    #it has to be within ((n_pds/2 + 1)) * separation_min from the front and back
-    #of the cable
-    attach_points = []
-    if n_pds <=0:
-        return []
-
-    
-    #choose a 'half_point' which is a random location on the mixing segment 
-    #where half of the PDs are to the right and half of the PDs are to the left
-    #save room for the N/2 pds at the start and end of the mixing segment if
-    #there is more than 1 pd
-
-    print( "\n" )
-    if(n_pds % 2):
-        #print( "odd number of PDs")
-        start_x = int((start_attach_point + ((n_pds+1)/2)*separation_min))
-        end_x   = int((end_attach_point   - ((n_pds+1)/2)*separation_min))
-
-        #when down to the last placement, min and max might switch places
-        #the random number generator does not like this, so get them sorted out
-        start = min(start_x,end_x)
-        end   = max(start_x,end_x)
-
-        #print( tab+"Satt   %d" % start_attach_point)
-        #print( tab+"Eatt   %d" % end_attach_point)
-        #print( tab+"Start  %d" % start)
-        #print( tab+"End    %d" % end)
-        #print( tab+"N_pds  %d" % n_pds)
-        if(n_pds == 1):
-            half_point   = random.randrange(start_attach_point, end_attach_point, 1)
-        elif(start == end):
-            half_point = start
-        else:
-            half_point   = random.randrange(start, end, 1)
-
-        #print( tab+"Attach %d" % half_point)
-        n_pds -= 1
-        if(n_pds > 1):
-            attach_points.extend(distribute_pds_random(start_attach_point, half_point-separation_min, n_pds/2, separation_min, tab+"\t"))
-
-        attach_points.extend([half_point])
-
-        if(n_pds > 1):
-            attach_points.extend(distribute_pds_random(half_point+separation_min, end_attach_point, n_pds/2, separation_min, tab+"\t"))
-
-    else: #must be 2 or more pds to get here
-        start = int((start_attach_point + ((n_pds)/2)*separation_min))
-        end   = int((end_attach_point   - ((n_pds)/2)*separation_min))
-
-        #print( tab+"Satt   %d" % start_attach_point)
-        #print( tab+"Eatt   %d" % end_attach_point)
-        #print( tab+"Start  %d" % start)
-        #print( tab+"End    %d" % end)
-        #print( tab+"N_pds  %d" % n_pds)
-        half_point   = random.randrange(start, end, 1)
-        #print( tab+"Half   %d" % half_point)
-
-        attach_points.extend(distribute_pds_random(start_attach_point, half_point, n_pds/2, separation_min, tab+"\t"))
-        attach_points.extend(distribute_pds_random(half_point,   end_attach_point, n_pds/2, separation_min, tab+"\t"))
-
-
-    #print( attach_points)
-    return attach_points
-
-def end_attach(end_attach_point, n_pds, separation_min):
-    attach_points = []
-    for i in range(1,n_pds+1):
-        attach_points.append(int(end_attach_point - ((n_pds-i) * separation_min)))
-    return attach_points
-
-def start_attach(start_attach_point, n_pds, separation_min):
-    attach_points = []
-    for i in range(0,n_pds):
-        attach_points.append(i * separation_min)
-    return attach_points
+from cable import Cable as Cable
+from node import Node as Node
+from termination import Termination as Termination
+from transmitter import Transmitter as Transmitter
+from trunk import Trunk as Trunk
 
 def return_loss_limit(freq):
     rl=[]
@@ -186,6 +102,16 @@ if __name__ == '__main__':
             default=0
             )
 
+    parser.add_argument('--start_pad', type=float, \
+            help='Specify the distance between start of cable and the 1st node',
+            default=0
+            )
+
+    parser.add_argument('--end_pad', type=float, \
+            help='Specify the distance between end of cable and the last node',
+            default=0
+            )
+
     parser.add_argument('--end_attach', type=int, \
             help='Specify an number of nodes to be placed at the end of the mixing\
             segment with \'separation_min\' spacing',
@@ -244,8 +170,12 @@ if __name__ == '__main__':
             )
 
     parser.add_argument('--tx_node', type=int, \
-            help='Set the transmitter node, default is tx at the start of the cable.\
-            (not implemented yet)',
+            help='Set the transmitter node, default is tx at the start of the cable.',\
+            default=1
+            )
+
+    parser.add_argument('--rx_node', type=int, \
+            help='Not currently implemented',\
             default=0
             )
 
@@ -259,7 +189,9 @@ if __name__ == '__main__':
  
     args = parser.parse_args()
 
-    
+    ###
+    #Setup random seed in case this run has random parameters
+    ###
     seed = args.seed
     if seed == -1:
         tim = datetime.datetime.now()
@@ -269,25 +201,174 @@ if __name__ == '__main__':
         random.seed(seed)
     print("#Random Seed = %s" % seed)
 
-    length = args.length       #meters
-    segs_per_meter=args.segments_per_meter #finite element lump size
-    tpd=3.335e-9      #speed of light on this cable
-    z0 = 100          #cable impedance
-    l_m = tpd * z0               #inductance per meter
-    c_m = tpd / z0               #capacitance per meter
-    r_m = 0.188                  #dc resistance per meter
-    llump = l_m / segs_per_meter
-    clump = c_m / segs_per_meter
-    rlump = r_m / segs_per_meter 
-    max_segs = int(segs_per_meter * length)
-    n_pds = args.nodes
-    separation_min = args.separation_min
-    drop_max = args.drop_max
-    ndrop = int(drop_max * segs_per_meter)
-    nsep = int(separation_min * segs_per_meter)
-    #print(ndrop)
-    #print(nsep)
+    #tpd=3.335e-9      #speed of light on this cable
+    #z0 = 100          #cable impedance
+    #l_m = tpd * z0    #inductance per meter
+    #c_m = tpd / z0    #capacitance per meter
+    #r_m = 0.188       #dc resistance per meter
+    #r_m = 0.001       #dc resistance per meter
 
+    #18 awg l and c data for a 5cm segment
+    #l1 a t2p {1*20.6435n}
+    #c1 t2p x {1*2.25026p}
+    #l_m = 20.6435e-09 / 0.05
+    #c_m = 2.25026e-12 / 0.05
+
+    #llump = l_m / args.segments_per_meter
+    #clump = c_m / args.segments_per_meter
+    #rlump = r_m / args.segments_per_meter 
+
+    ################################################################################
+    #Make trunk segments that will connect the nodes
+    ################################################################################
+    t=Trunk( length=args.length
+            , nodes=args.nodes
+            , start_pad=args.start_pad
+            , end_pad=args.end_pad
+            , separation_min=args.separation_min
+            , start_attach=args.start_attach
+            , end_attach=args.start_attach
+            , random_attach=args.random_attach
+            )
+    trunk_segments = t.get_cable_segments()
+    
+    ################################################################################
+    #Connect termination Resistors (actually termination R/C) to then ends of
+    #the trun
+    ################################################################################
+    term_start = Termination(name="start_term", port=trunk_segments[0].port1, stim_port="start")
+    term_end   = Termination(name="end_term"  , port=trunk_segments[-1].port2, stim_port="end")
+
+    ################################################################################
+    #Attach nodes to the trunk
+    ################################################################################
+    nodes = []
+    for n in range(1,args.nodes+1):
+        port="t%d" % (n)
+        node = Node(number=n,port=port, drop_length=args.drop_max, random_drop=args.random_drop)
+        nodes.append(node)
+
+    ################################################################################
+    #Determine which node will be the transmitter for the simulation
+    ################################################################################
+    #boundary check the transmit node index
+    tx_node = args.tx_node
+    if tx_node<1: #choose a random transmit node
+        tx_node = random.randint(1,args.nodes)
+        print("Randomly Chose Node %d as the transmitter" % tx_node)
+    tx_index=min(tx_node, args.nodes)
+    tx_index=max(tx_index, 1)
+    tx_node = nodes[tx_index-1]
+    transmitter = Transmitter(port=tx_node.phy_port)
+        
+    ################################################################################
+    #Write a spice file with the system setup
+    ################################################################################
+    with open("cable.p", 'w') as cable:
+        cable.write("*lumped transmission line model with %d segments per meter at %d meters\n"\
+        % (args.segments_per_meter, args.length))
+        cable.write("*and a %f meter long cable\n" % args.length)
+        cable.write(".include tlump2.p\n")
+        cable.write(".include node.p\n")
+
+        for s in trunk_segments:
+            cable.write(s.subcircuit()+"\n")
+        for n in nodes:
+            cable.write(n.subcircuit()+"\n")
+
+        cable.write(term_start.subcircuit()+"\n")
+        cable.write(term_end.subcircuit()+"\n")
+        cable.write("** MAIN NETWORK DESCRIPTION **\n")
+        for s in trunk_segments:
+            cable.write(s.instance()+"\n")
+        for n in nodes:
+            cable.write(n.instance()+"\n")
+        cable.write(term_start.instance()+"\n")
+        cable.write(term_end.instance()+"\n")
+
+    ################################################################################
+    #Create an ac stimulus file
+    #This is separate from the system spice file in case we also want to do
+    # transient simulations.  Then another transient stimulus file will be
+    # created
+    ################################################################################
+    with open("zcable.ac.cir", 'w') as zcable:
+        zcable.write("*ac sim command for cable impedance measurement\n")
+        zcable.write(".include cable.p\n")
+
+        #differential signal input
+        zcable.write(transmitter.instance()+"\n")
+
+        #path to ground
+        zcable.write("vrtn rtn 0 0\n")
+
+        #simulation command
+        zcable.write(".ac lin 400 1meg 40meg\n")
+
+        #select nodes to save to speed up the sim and reduce file size
+        zcable.write(".save v(*) i(*)\n")
+        for n in nodes:
+            zcable.write("+ %s\n" % n.termination_current())
+
+
+    cirfile = "zcable.ac.cir"
+    rawfile = "zcable.ac.raw"
+
+    ################################################################################
+    #Set up and run a simulation, but don't run it twice if it has already been
+    #run
+    ################################################################################
+    #condense the sim files into a single *.spi file
+    #crete a md5 of the spi file then make a unique directory to store this sim
+    #If batches of sims are run more than once, just extract the data without 
+    #running the sim again
+    spi = SpiFile(cirfile)
+    spi.readCircuit()
+    spi.followInclude = True
+    spi.digestSpiceFile()
+    design_md5 = spi.md5(skipParams=False,skipComments=True,skipSave=False)
+    spiSave  = os.path.join("data",design_md5,design_md5+".spi")
+    logSave  = os.path.join("data",design_md5,design_md5+".log")
+    rawSave  = os.path.join("data",design_md5,design_md5+".raw")
+    outputdb = os.path.join("data",design_md5)
+    #print( design_md5)
+    if not os.path.exists("data"):
+        print( "Data Folder does not exist")
+        print( "Creating...." )
+        try:
+            os.makedirs("data")
+        except:
+            print( "Cannot create data folder")
+            exit(1)
+
+    if not os.path.exists(outputdb):
+        print( "Regression Folder %s does not exist" % design_md5)
+        print( "Creating...." )
+        try:
+            os.makedirs(outputdb)
+            spi.outputToFile(spiSave)
+        except:
+            print( "Cannot create regression folder")
+            exit(1)
+
+    #if there is already raw and log data in the md5 directory then assume the sim has 
+    #already been run, otherwise run the sim
+    try:
+        open(spiSave,"r")
+        #print( spiSave)
+        open(logSave,"r")
+        #print( logSave)
+        open(rawSave,"r")
+        #print( rawSave)
+        print( "Pulling Sim From database %s" % design_md5) 
+
+    except:
+        print( "Running Simulation")
+        runspice.runspice(spiSave)
+
+    ################################################################################
+    #Set up containers to plot the output
+    ################################################################################
     #containers to hold output data for plotting
     fig, (ax1, ax2, ax3) = plt.subplots(3,1, figsize=(9, 9))  # Create a figure and an axes.
     frequency = []
@@ -296,384 +377,47 @@ if __name__ == '__main__':
     plot_attach = []
     plot_drop = []
 
-    #attach points are the node numbers 
-    unattached = n_pds
-    attach_start = 0
-    attach_end = length*segs_per_meter
-    end = []
-    start = []
-    if(args.end_attach):
-        if(args.end_attach <= unattached and args.end_attach > 0):
-            nend = args.end_attach
-            end = end_attach(attach_end, nend , nsep)
-            unattached -= nend
-            attach_end = end[0]-nsep
+    ################################################################################
+    #Extract data from the rawfile
+    ################################################################################
+    rf=ltcsimraw(rawSave)
+    for n in nodes:
+        if n != tx_node:
+            sparams = rf.scattering_parameters(
+                    tx_node.phy_port_voltage(),
+                    transmitter.transmitter_current(),
+                    n.phy_port_voltage(),
+                    n.termination_current(),
+                    rin=50, rout=50)
 
-    if(args.start_attach):
-        if(args.start_attach <= unattached and args.start_attach > 0):
-            nstart = args.start_attach
-            start = start_attach(attach_start, nstart, nsep)
-            unattached -= nstart
-            attach_start = start[-1]+nsep
+            frequency.append(sparams['frequency'])
+            s11_plot.append(sparams['s11'])
+            s21_plot.append(sparams['gain'])
+    #print(labels)
 
-    mid = []
-    if(args.random_attach):
-        mid=distribute_pds_random(attach_start,attach_end, unattached, nsep)
-    else:
-        mid=distribute_pds_even(attach_start, attach_end, unattached, nsep)
-
-    attach_points = start + mid + end
-
-    #exit(1)
-
-    #attach_points=[3,455,458,461,464,467,470,473,476,479,482,485,488,491,494,497,500]
-    #attach_points=[12,832,844,856,868,880,892,904,916,928,940,952,964,976,988,1000]
-    #attach_points=[1000]
-    
-    #for a in range(0,len(attach_points)+1):
-    #for a in range(0,2):
-        #attach_points_x = attach_points[0:a]
-    if(True):
-        attach_points_x = attach_points
-        with open("cable.p", 'w') as cable:
-
-            cable.write("*lumped transmission line model with %d segments per meter at %d meters\n"\
-            % (segs_per_meter, length))
-            cable.write("*and a %f meter long cable\n" % length)
-            cable.write(".include tlump3.p\n")
-            cable.write(".include pd.p\n")
-            cable.write(".param clump=%.6g\n" % clump)
-            cable.write(".param llump=%.6g\n" % llump)
-            cable.write(".param rg=100e6\n")
-            cable.write(".param rser=%.6g\n" % r_m)
-            cable.write(".param rnode=%.6g\n" % args.rnode)
-            cable.write(".param cnode=%.6g\n" % args.cnode)
-            cable.write(".param lpodl=%.6g\n" % args.lpodl)
-
-            for seg in range(0,max_segs):
-                cable.write("Xseg%04d p%04d n%04d p%04d n%04d 0 tlump\n" % (seg, seg, seg, seg+1, seg+1)) 
-            cable.write("rend_term p%04d n%04d %f\n" % (max_segs, max_segs, z0))
-            cable.write("**************************\n")
-            cable.write("***** PD ATTACHMENTS *****\n")
-            cable.write("**************************\n")
-            npd=0
-            for pd in attach_points_x:
-                npd+=1
-
-                #randomize drop lengths
-                if args.random_drop:
-                    ndrop_x = random.randint(0, ndrop)
-                else:
-                    ndrop_x = ndrop
-
-                #print attachment information
-                att = "*PD %02d - attach at %.3f meters with %.3f meter drop" % \
-                        (npd, pd/float(segs_per_meter), ndrop_x / float(segs_per_meter))
-                cable.write("%s\n" % att)
-                print(att)
-
-                #keep track of attachment and drop for plotting later
-                plot_attach.append(pd/float(segs_per_meter))
-                if(npd % 2 == 0):
-                    plot_drop.append(-1 * ndrop_x / float(segs_per_meter))
-                else:
-                    plot_drop.append(ndrop_x / float(segs_per_meter))
-
-                i=-1 #need to define i=-1 here incase ndrop_x=0
-                for i in range(0,ndrop_x):
-                    if i==0:
-                        cable.write("Xseg%04d_%04d p%04d n%04d p%04d_%04d n%04d_%04d 0 tlump\n" %\
-                                        (pd, i, pd, pd, pd, i+1, pd, i+1)) 
-                    else:
-                        cable.write("Xseg%04d_%04d p%04d_%04d n%04d_%04d p%04d_%04d n%04d_%04d 0 tlump\n" %\
-                                        (pd, i, pd, i, pd, i, pd, i+1, pd, i+1)) 
-                if(ndrop_x == 0):
-                    cable.write("rpdp%04d p%04d pdp_%04d 0.010\n" % (pd, pd, npd))
-                    cable.write("rpdn%04d n%04d pdn_%04d 0.010\n" % (pd, pd, npd))
-                else:
-                    cable.write("rpdp%04d p%04d_%04d pdp_%04d 0.010\n" % (pd, pd, i+1, npd))
-                    cable.write("rpdn%04d n%04d_%04d pdn_%04d 0.010\n" % (pd, pd, i+1, npd))
-                cable.write("xpd%04d pdp_%04d pdn_%04d 0 pd\n" % (npd, npd, npd))
-
-        with open("zcable.ac.cir", 'w') as zcable:
-            zcable.write("*ac sim command for cable impedance measurement\n")
-            zcable.write(".include cable.p\n")
-
-            #differential signal input
-            zcable.write("vac p0000_p n0000_n 0 AC 1\n")
-
-            #current flows out of the positive terminal of rp or the s-parameters wont calculate correctly
-            zcable.write("rp p%04d p%04d_p 50\n" % (0, 0))
-            zcable.write("rn n%04d_n n%04d 50\n" % (0, 0))
-
-            #the next 4 resistors help make the common mode voltage for the differential v-source
-            zcable.write("rrpp p%04d_p refp 50\n" % 0)
-            zcable.write("rrpn refp 0 50\n")
-            zcable.write("rrnp n%04d_n refn 50\n" % 0)
-            zcable.write("rrnn refn 0 50\n")
-
-            #simulation command
-            zcable.write(".ac lin 200 1meg 40meg\n")
-
-            #this .net expression isn't helping anymore, the s-parameters are being calculated from phasors
-            #in the .ac output
-            zcable.write(".net I(rend_term) vac\n")
-
-            #select nodes to save to speed up the sim and reduce file size
-            zcable.write(".save \n")
-            zcable.write("+ v(refp) v(refn)\n")
-            zcable.write("+ I(vac) I(rp) I(rend_term)\n")
-            zcable.write("+ v(p0000) v(n0000)\n")
-            zcable.write("+ S11(vac) S21(vac)\n")
-            zcable.write("+ v(p%04d) v(n%04d)\n" % (max_segs, max_segs))
-
-        with open("zcable.tran.cir", 'w') as zcable:
-            zcable.write("*tranient sim command for cable impedance measurement\n")
-            zcable.write(".include cable.p\n")
-
-            zcable.write("vap ap 0 0\n")
-            zcable.write("+pwl 0 0\n")
-            zcable.write("++50n  0.0\n")
-           
-            #start one
-            zcable.write("++10n  1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-
-            #zero
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-
-            #zero
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-
-            #one
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-
-            #zero
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-
-            #one
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-
-            #one
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-
-            #zero
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-
-            #end
-            zcable.write("++10n  0.0\n")
-
-
-
-            
-            zcable.write("van 0 an 0\n")
-            zcable.write("+pwl 0 0\n")
-            zcable.write("++50n  0.0\n")
-           
-            #start one
-            zcable.write("++10n  1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-
-            #zero
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-
-            #zero
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-
-            #one
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-
-            #zero
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-
-            #one
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-
-            #one
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-
-            #zero
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n -1.0\n")
-            zcable.write("++20n  1.0\n")
-            zcable.write("++20n  1.0\n")
-
-            #end
-            zcable.write("++10n  0.0\n")
-
-            zcable.write("rap ap p0000 50\n")
-
-            zcable.write("ran an n0000 50\n")
-
-            zcable.write("rrefp ap refp 50\n")
-            zcable.write("rrefn an refn 50\n")
-            zcable.write("rref  refp refn 100\n")
-            zcable.write(".save V(*)\n")
-            zcable.write(".tran 2000n\n")
-
-        cirfile = "zcable.ac.cir"
-        rawfile = "zcable.ac.raw"
-
-        #condense the sim files into a single *.spi file
-        #crete a md5 of the spi file then make a unique directory to store this sim
-        #If batches of sims are run more than once, just extract the data without 
-        #running the sim again
-        spi = SpiFile(cirfile)
-        spi.readCircuit()
-        spi.followInclude = True
-        spi.digestSpiceFile()
-        design_md5 = spi.md5(False, True, True)
-        spiSave  = os.path.join("data",design_md5,design_md5+".spi")
-        logSave  = os.path.join("data",design_md5,design_md5+".log")
-        rawSave  = os.path.join("data",design_md5,design_md5+".raw")
-        outputdb = os.path.join("data",design_md5)
-        #print( design_md5)
-        if not os.path.exists("data"):
-            print( "Data Folder does not exist")
-            print( "Creating...." )
-            try:
-                os.makedirs("data")
-            except:
-                print( "Cannot create data folder")
-                exit(1)
-
-        if not os.path.exists(outputdb):
-            print( "Regression Folder %s does not exist" % design_md5)
-            print( "Creating...." )
-            try:
-                os.makedirs(outputdb)
-                spi.outputToFile(spiSave)
-            except:
-                print( "Cannot create regression folder")
-                exit(1)
-
-        #if there is already raw and log data in the md5 directory then assume the sim has 
-        #already been run, otherwise run the sim
-        try:
-            open(spiSave,"r")
-            #print( spiSave)
-            open(logSave,"r")
-            #print( logSave)
-            open(rawSave,"r")
-            #print( rawSave)
-            print( "Pulling Sim From database %s" % design_md5) 
-
-        except:
-            print( "Running Simulation")
-            runspice.runspice(spiSave)
-
-        #determine the node names for the end of the cable
-        endp = "p%04d" % ( max_segs)
-        endn = "n%04d" % ( max_segs)
-
-        #get the data out of the raw file
-        rf=ltcsimraw(rawSave)
-        (data, labels) = rf.getSignals(["p0000","n0000", endp, endn],["rp", "rend_term"],["S11(vac)", "s21(vac)"])
-
-
-        #print( the s-parameters in a .csv file)
-
-        with open(csvFile, 'a') as zcable:
-            zcable.write("#freq, s11_mag, s21_mag, s11_mp_mag, s21_mp_mag\n")
-            f = []
-            s1 = []
-            s2 = []
-            for x in data:
-                #print( x[1] )
-                #print( x[2] )
-                s11  = rf.decodeComplex(x[7])
-                s21 =  rf.decodeComplex(x[8])
-
-                vend   = x[3]-x[4]
-                iend   = x[6]
-                vin    = x[1]-x[2]
-                iin    = x[5]
-                zin    = vin/iin
-                zin    = 100
-                zend   = 100
-                zin_x  = np.conjugate(zin)
-                zend_x = np.conjugate(zend)
-                a1 = (vin - (iin*zin_x))
-                b1 = (vin + (iin*zin))
-                a2 = (vend - (iend*zend_x))
-                b2 = (vend + (iend*zend))
-                s11_mp = rf.decodeComplex(b1 / a1)
-                s21_mp = rf.decodeComplex(b2 / a1)
-                zcable.write("%.12g, %.12g, %.12g, %.12g, %.12g\n" % (
-                        x[0], s11[0], s21[0], s11_mp[0], s21_mp[0]
-                        ))
-                f.append(x[0])
-                s1.append(s11_mp[0])
-                s2.append(s21_mp[0])
-            zcable.write("\n\n")
-        frequency.append(f)
-        s11_plot.append(s1)
-        s21_plot.append(s2)
-        #print(labels)
-
+    ################################################################################
+    #Plot the data
+    ################################################################################
     rl_limit = return_loss_limit(frequency[0])
     il_limit = insertion_loss_limit(frequency[0])
+    ax1.plot(frequency[0], rl_limit, label="clause 147 limit")  # Plot more data on the axes...
+    ax2.plot(frequency[0], il_limit, label="clause 147 limit")  # Plot more data on the axes...
+    ax1.plot(frequency[0], s11_plot[0], label="test", color='k')  # Plot more data on the axes...
     for i,p in enumerate(frequency):
-        ax1.plot(frequency[i], s11_plot[i], label="test")  # Plot more data on the axes...
         ax2.plot(frequency[i], s21_plot[i], label="test")  # Plot more data on the axes...
         #ax1.plot(frequency[i], s11_plot[i])  # Plot more data on the axes...
         #ax2.plot(frequency[i], s21_plot[i])  # Plot more data on the axes...
 
-    ax1.plot(frequency[0], rl_limit, label="clause 147 limit")  # Plot more data on the axes...
-    ax2.plot(frequency[0], il_limit, label="clause 147 limit")  # Plot more data on the axes...
-    ax1.set_ylabel('RL s11 (dB)')  # Add an x-label to the axes.
+    ax1.set_ylabel('RL (dB)')  # Add an x-label to the axes.
     ax1.set_xlim([0,40e6])
     if(args.noautoscale):
-        ax1.set_ylim([-70,0])
+        ax1.set_ylim([-70,10])
 
-    ax2.set_ylabel('IL s21 (dB)')  # Add an x-label to the axes.
+    ax2.set_ylabel('Rx/Tx (dB)')  # Add an x-label to the axes.
     ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
     ax2.set_xlim([0,40e6])
     if(args.noautoscale):
-        ax2.set_ylim([-20,0])
+        ax2.set_ylim([-20,10])
     ax1.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
 
     #ax3.set_xlim([-1,int(args.length)+1])
@@ -685,22 +429,30 @@ if __name__ == '__main__':
 
     #mixing segment line
     ax3.plot([0,args.length],[0,0], color="k")
-    ax3.plot(plot_attach, np.zeros_like(plot_attach), "-o", color="k", markerfacecolor="w")
+    for node in t.attach_points:
+        ax3.plot([node], np.zeros_like([node]), "-o")
+    ax3.plot(t.attach_points[tx_index-1], np.zeros_like(t.attach_points[tx_index-1]),
+            "-*",
+            color="k",
+            markerfacecolor="k",
+            markersize=12
+            )
 
-    #drop lines
-    ax3.vlines(plot_attach, 0, plot_drop, color="tab:red")
+    #generate a list with the drop lengths
+    plot_drop=[]
+    for node in nodes:
+        #make every other drop go above/below the trunk line so it is easier to
+        #see what is happening
+        if(node.number % 2 == 0):
+            plot_drop.append(-1 * node.drop_length)
+        else:
+            plot_drop.append(node.drop_length)
 
-    #text annotation
-    #ax3.annotate(
-    #     'N1'
-    #     , xy=(10, 0)
-    #     , xytext=(10, -0.5)
-    #     , xycoords='data'
-    #     , va='top'
-    #     ) 
+    #add the drop lengths to the plot
+    ax3.vlines(t.attach_points, 0, plot_drop, color="tab:red")
 
+    #save the plot as a png file incase another script is making a gif
     plt.savefig('zcable.png')
     if not args.noplot:
         plt.show()
-        #print("#Seed: %d" % seed)
         print("#Close plot window to continue")
