@@ -108,7 +108,7 @@ class Trunk(object):
     """
 
     def __init__(self, name="trunk" ,length=10, nodes=16, gage=18, max_seg_length=0.05, separation_min=1, random_seed=-1, start_pad=0, end_pad=0\
-            , start_attach=0, end_attach=0, random_attach=True):
+            , start_attach=0, end_attach=0, random_attach=True, attach_error=0):
         self.name = name
         self.length = length
         self.gage = gage
@@ -116,6 +116,7 @@ class Trunk(object):
         self.separation_min = separation_min
         self.start_pad = start_pad
         self.end_pad = end_pad
+        self.attach_error = attach_error
         self.segs = []
 
         unattached = nodes
@@ -178,7 +179,10 @@ class Trunk(object):
             return [(end_attach_point + start_attach_point)/2]
         delta = (end_attach_point - start_attach_point) / (n_pds - 1)
         for i in range(0,n_pds):
-            attach_points.append(start_attach_point + (i * delta))
+            point = start_attach_point + (i * delta) + random.gauss(0, self.attach_error)
+            point = min(point,self.length)
+            point = max(point,0)
+            attach_points.append(point)
         return attach_points
 
     def end_attach(self, end_attach_point, n_pds, separation_min):

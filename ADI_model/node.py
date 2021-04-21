@@ -31,7 +31,8 @@ class Node(object):
     """
 
     def __init__(self, number=0, port="t0", drop_length=0.0, drop_gage=18,
-            spice_model="node", random_drop=False):
+            spice_model="node", random_drop=False,
+            cnode=30e-12, lpodl=80e-6, rnode=10000):
         self.name = "node%d" % number
         self.number = number
         self.port = port
@@ -42,6 +43,9 @@ class Node(object):
             self.drop_length = random.uniform(0,drop_length)
         self.drop_gage = drop_gage
         self.spice_model = spice_model
+        self.cnode = cnode
+        self.lpodl = lpodl
+        self.rnode = rnode
 
     def subcircuit(self):
         """Generate the subcircuit definition for this node segment"""
@@ -75,12 +79,15 @@ class Node(object):
                     self.drop_name
                 )
                 )
-        instance.append("x%s node_%d_mdi_p node_%d_mdi_n %sp %sn rtn %s" % \
+        instance.append("x%s node_%d_mdi_p node_%d_mdi_n %sp %sn rtn %s params: cnode=%g lpodl=%g rnode=%g" % \
                 (
                     self.name,
                     self.number, self.number,
                     self.phy_port, self.phy_port,
-                    self.spice_model
+                    self.spice_model,
+                    self.cnode,
+                    self.lpodl,
+                    self.rnode
                 )
                 )
         return "\n".join(instance)

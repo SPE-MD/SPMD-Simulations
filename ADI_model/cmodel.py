@@ -23,6 +23,7 @@ import datetime
 sys.path.append(dirname(__file__)) #adds this file's director to the path
 #import subprocess
 import runspice
+import mpUtil
 from ltcsimraw import ltcsimraw as ltcsimraw
 #from steptable import StepTable
 from spifile import SpiFile as SpiFile
@@ -170,12 +171,12 @@ if __name__ == '__main__':
             )
 
     parser.add_argument('--tx_node', type=int, \
-            help='Set the transmitter node, default is tx at the start of the cable.',\
+            help='Set the transmitter node.',\
             default=1
             )
 
     parser.add_argument('--rx_node', type=int, \
-            help='Not currently implemented',\
+            help='Not currently implemented because all non tx nodes are rx nodes',\
             default=0
             )
 
@@ -186,7 +187,15 @@ if __name__ == '__main__':
             help='set this flag to lock the y-axis on IL/RL plots to -80dB/-70dB\
             respectively.  The xaxis on the network model will be locked at -1m to 101m'
             )
- 
+
+    parser.add_argument('--attach_error', type=float, \
+            help='add gaussian error to attachment points.  Pass the the sigma value of the attachment\
+            error or 0 for no error.  Ignored for randomly placed nodes.  If'\
+            'attach_error is set to a large value, can separation_min be violated?'\
+            'I don\'t know',\
+            default=0
+            )
+
     args = parser.parse_args()
 
     ###
@@ -229,8 +238,11 @@ if __name__ == '__main__':
             , start_attach=args.start_attach
             , end_attach=args.start_attach
             , random_attach=args.random_attach
+            , attach_error=args.attach_error
             )
     trunk_segments = t.get_cable_segments()
+    for x in trunk_segments:
+        print(x)
     
     ################################################################################
     #Connect termination Resistors (actually termination R/C) to then ends of
@@ -245,7 +257,8 @@ if __name__ == '__main__':
     nodes = []
     for n in range(1,args.nodes+1):
         port="t%d" % (n)
-        node = Node(number=n,port=port, drop_length=args.drop_max, random_drop=args.random_drop)
+        node = Node(number=n,port=port, drop_length=args.drop_max, random_drop=args.random_drop,
+                cnode=args.cnode, lpodl=args.lpodl, rnode=args.rnode)
         nodes.append(node)
 
     ################################################################################
@@ -376,6 +389,7 @@ if __name__ == '__main__':
     s21_plot  = []
     plot_attach = []
     plot_drop = []
+    csv_aoa = []
 
     ################################################################################
     #Extract data from the rawfile
@@ -393,7 +407,18 @@ if __name__ == '__main__':
             frequency.append(sparams['frequency'])
             s11_plot.append(sparams['s11'])
             s21_plot.append(sparams['gain'])
-    #print(labels)
+
+            ### complile data in an aoa for the csv file.
+            if csv_aoa == []:
+                csv_aoa.append(["#frequency"]+sparams['frequency'])
+                csv_aoa.append(["#RL_node_%d" % tx_node.number]+sparams['s11'])
+            csv_aoa.append(["#IL_node_%d" % n.number]+sparams['gain'])
+
+    ################################################################################
+    #Write the csv file
+    ################################################################################
+    with open(csvFile, 'w') as csv:
+        csv.write(mpUtil.aoa2csv(mpUtil.transpose(csv_aoa)))
 
     ################################################################################
     #Plot the data
