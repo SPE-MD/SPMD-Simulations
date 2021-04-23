@@ -12,6 +12,8 @@ for an example of how the Dirichlet distribution is used.
 .. moduleauthor:: Scott Griffiths <stgriffi@ra.rockwell.com>
 """
 
+import numpy as np
+
 
 def generate_random_spacings(nodes, length=25, alpha=2):
     """
