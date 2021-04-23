@@ -1,6 +1,7 @@
 # Overview
 
 This folder contains code developed by Rockwell Automation, primarily during the development of IEEE 802.3cg. The results from this code have been published in several IEEE presentations, including:
+
 https://www.ieee802.org/3/cg/public/Mar2018/brandt_cg_01a_0318.pdf
 https://www.ieee802.org/3/cg/public/Sept2018/griffiths_3cg_01a_0918.pdf
 https://www.ieee802.org/3/cg/public/May2019/griffiths_3cg_01b_0519.pdf
