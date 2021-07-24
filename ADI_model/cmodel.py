@@ -140,8 +140,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--random_drop',
             action='store_true',\
-            help='Minimum separation between nodes in meters.  This number will\
-            be rounded to an integer number of segments per meter',\
+            help='When set, node drop length will be chosen at random between\
+            zero and drop_max. Drop lengths should be reproducible by reusing\
+            the seed value from another sim (see the --seed flag) Otherwise,\
+            drop lengths will be evenly distributed across the mixing segment',
             )
 
     parser.add_argument('--separation_min', type=float, \
