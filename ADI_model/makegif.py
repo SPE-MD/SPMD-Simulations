@@ -1,6 +1,8 @@
 #! /usr/bin/env python3
 
 import sys
+import time
+from datetime import datetime
 import string
 import struct
 import math
@@ -14,20 +16,33 @@ import imageio
 import subprocess
 import shutil
 
+
+startTime = datetime.now()
+dateTimeStampString = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+print ("GIF Generation for ", sys.argv[0][:-3], " started at %s" % str(startTime))
+    
+
+#make the gif file name correspond with the script name
+#remove ".py" from script namd and replace it with ".gif"
+this_dir = os.getcwd()
+gif_file_root = sys.argv[0][:-3]+"_"+dateTimeStampString
+gif_file = gif_file_root+".gif"
+png_file = gif_file_root+".png"
+
 #remove old gif generation files
-if os.path.exists("gif"):
+if os.path.exists(gif_file_root):
     try:
-        shutil.rmtree("./gif")
+        shutil.rmtree("./%s" % gif_file_root)
     except:
-        print( "Issue removing old files in './gif/'" )
+        print( "Issue removing old files in './%s/'" % gif_file_root )
         exit(1)
 
 #recreate the directory to hold the gif files
-if not os.path.exists("gif"):
+if not os.path.exists(gif_file_root):
     try:
-        os.makedirs("gif")
+        os.makedirs(gif_file_root)
     except:
-        print( "Cannot create 'gif' folder")
+        print( "Cannot create '%s' folder" % gif_file_root)
         exit(1)
 
 #loop through the sim and build up a library of png images to animate
@@ -45,52 +60,61 @@ pngfiles = []
 #            ,"--noplot"\
 #            ])
 
+os.chdir("../ADI_Model")
+loop=0
 #change the drop length
 d=0.0
 c=30
-n=16
+n=32
 t=1
+s=0
+l=100
 #for i in range(15,30+1,1):
 #for d in range(0,50,5):
 #for d in range(0,50,5):
-#for n in range(2,16+1):
-for l in range(16,50):
-    for t in range(1,n+1):
-        cnode = c * 1e-12
-        drop = d/100
-        try:
-            command = ["python","system.py"\
-                ,"--seed=144704"\
-                ,"--nodes=%d" % n\
-                ,"--length=%f" % l\
-                ,"--separation_min=1"\
-                ,"--tx_node=%d" % t\
-                #,"--start_attach=1"\
-                #,"--end_attach=1"\
-                ,"--drop_max=%.02f" % drop\
-                ,"--cnode=%.02g" % cnode\
-                ,"--noplot"\
-                ,"--noautoscale"\
-                ]
+for n in range(2,32+1):
+#for l in range(16,100):
+#for t in range(1,n+1):
+#for s in range(1,30):
+    cnode = c * 1e-12
+    drop = d/100
+    try:
+        command = ["python","cmodel.py"\
+            ,"--seed=%d" % s\
+            ,"--nodes=%d" % n\
+            ,"--length=%f" % l\
+            ,"--separation_min=1"\
+            ,"--tx_node=%d" % t\
+            #,"--start_attach=1"\
+            #,"--end_attach=1"\
+            ,"--drop_max=%.02f" % drop\
+            ,"--cnode=%.02g" % cnode\
+            #,"--attach_error=0.1"\
+            #,"--random_attach"\
+            ,"--noplot"\
+            ,"--noautoscale"\
+            ,"--plot_png_filename=%s" % png_file\
+            ]
 
-            print(" ".join(command))
-            subprocess.run(command)
-        except:
-            print( "Issue running simulation" )
-            exit(1)
+        print(" ".join(command))
+        subprocess.run(command)
+    except:
+        print( "Issue running simulation" )
+        exit(1)
 
-        try:
-            new_file = os.path.join("gif","frame_%d_%d.png" % (t, l))
-            shutil.move("zcable.png", new_file)
-        except Exception as e:
-            print( e )
-            print( "Issue copying image file" )
-            exit(1)
+    try:
+        new_file = os.path.join(this_dir,gif_file_root,"frame_%d.png" % (loop))
+        shutil.move(png_file, new_file)
+        loop+=1
+    except Exception as e:
+        print( e )
+        print( "Issue copying image file" )
+        exit(1)
 
-        pngfiles.append(new_file)
+    pngfiles.append(new_file)
 
+os.chdir(this_dir)
 #setup the gif loop to go forward, then backwards, and loop forever
-gif_file = 'zcable.gif'
 loop = []
 for png in pngfiles:
     loop.append(png)
@@ -103,3 +127,7 @@ for filename in loop:
     images.append(imageio.imread(filename))
 imageio.mimsave(gif_file, images)
 print("generated gif: %s" % gif_file)
+
+endTime = datetime.now()
+print ("GIF Generation for ", sys.argv[0][:-3], " ended at %s" % str(startTime))
+print ("Elapsed time %s" % (endTime - startTime) )
