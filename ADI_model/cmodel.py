@@ -185,6 +185,11 @@ if __name__ == '__main__':
     parser.add_argument('--noplot', action='store_true', help='set this flag to\
             prevent plotting')
     
+    parser.add_argument('--plot_png_filename', type=str, \
+            help='Filename for plot image output as a .png file. Default is zcable.png',\
+            default='zcable.png'
+            )
+
     parser.add_argument('--noautoscale', action='store_true',\
             help='set this flag to lock the y-axis on IL/RL plots to -80dB/-70dB\
             respectively.  The xaxis on the network model will be locked at -1m to 101m'
@@ -479,7 +484,7 @@ if __name__ == '__main__':
     ax3.vlines(t.attach_points, 0, plot_drop, color="tab:red")
 
     #save the plot as a png file incase another script is making a gif
-    plt.savefig('zcable.png')
+    plt.savefig(args.plot_png_filename)
     if not args.noplot:
-        plt.show()
         print("#Close plot window to continue")
+        plt.show()
