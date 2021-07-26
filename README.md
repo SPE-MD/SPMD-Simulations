@@ -36,6 +36,7 @@ The goal of these simulations is to provide a model which combines the best trai
 Front end automation is via Python 3. Some packaged are required:
 * matplotlib
 * numpy
+* imageio (for animated gif output)
 * openpyxl (for future xlsx spreadsheet I/O features)
 
 Most models here are based on LTSpice, which can be downloaded for free and carries a permissive license.
