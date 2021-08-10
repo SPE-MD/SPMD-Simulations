@@ -18,6 +18,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 import datetime
+import colorsys
 #from multiprocessing import Process
 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
@@ -27,12 +28,18 @@ import mpUtil
 from ltcsimraw import ltcsimraw as ltcsimraw
 #from steptable import StepTable
 from spifile import SpiFile as SpiFile
+from micro_reflections import cy_f2t
 
 from cable import Cable as Cable
 from node import Node as Node
 from termination import Termination as Termination
 from transmitter import Transmitter as Transmitter
 from trunk import Trunk as Trunk
+
+
+
+def frequency_dom_to_time_dom(data):
+    return cy_f2t(data, T=0.10, N=256)
 
 def return_loss_limit(freq):
     rl=[]
@@ -390,7 +397,7 @@ if __name__ == '__main__':
     #Set up containers to plot the output
     ################################################################################
     #containers to hold output data for plotting
-    fig, (ax1, ax2, ax3) = plt.subplots(3,1, figsize=(9, 9))  # Create a figure and an axes.
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4,1, figsize=(9, 9))  # Create a figure and an axes.
     frequency = []
     s11_plot  = []
     s21_plot  = []
@@ -430,15 +437,47 @@ if __name__ == '__main__':
     ################################################################################
     #Plot the data
     ################################################################################
+    #MatPlotLib Default
+    # color_array = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', 
+    #                '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', 
+    #                '#bcbd22', '#17becf']
+
+    #Sample static array of color values
+    # color_array =['#FF6633', '#FFB399', '#FF33FF', '#FFFF99', '#00B3E6', 
+    #               '#E6B333', '#3366E6', '#999966', '#99FF99', '#B34D4D',
+    #               '#80B300', '#809900', '#E6B3B3', '#6680B3', '#66991A', 
+    #               '#FF99E6', '#CCFF1A', '#FF1A66', '#E6331A', '#33FFCC',
+    #               '#66994D', '#B366CC', '#4D8000', '#B33300', '#CC80CC', 
+    #               '#66664D', '#991AFF', '#E666FF', '#4DB3FF', '#1AB399',
+    #               '#E666B3', '#33991A', '#CC9999', '#B3B31A', '#00E680', 
+    #               '#4D8066', '#809980', '#E6FF80', '#1AFF33', '#999933',
+    #               '#FF3380', '#CCCC00', '#66E64D', '#4D80CC', '#9900B3', 
+    #               '#E64D66', '#4DB380', '#FF4D4D', '#99E6E6', '#6666FF']
+
+    # Generate evenly spaced hue color list in spectral order
+    color_array = []
+
+    #Hue steps from 0 to 0.75 equate to 0 to 270 degrees Hue, or roughly red to violet
+    #We don't go all the way to 1.0 because that would wrap back around to red
+
+    for color_step in np.linspace(0, 0.75, num=len(nodes)):
+        (red,green,blue) = colorsys.hsv_to_rgb(color_step,1,1)
+        color_array.append('#%02X%02X%02X' % (int(red*255), int(green*255), int(blue*255)))  
+
     rl_limit = return_loss_limit(frequency[0])
     il_limit = insertion_loss_limit(frequency[0])
     ax1.plot(frequency[0], rl_limit, label="clause 147 limit")  # Plot more data on the axes...
     ax2.plot(frequency[0], il_limit, label="clause 147 limit")  # Plot more data on the axes...
     ax1.plot(frequency[0], s11_plot[0], label="test", color='k')  # Plot more data on the axes...
+    timeDomainData = []
     for i,p in enumerate(frequency):
-        ax2.plot(frequency[i], s21_plot[i], label="test")  # Plot more data on the axes...
+        ax2.plot(frequency[i], s21_plot[i], label="test", color=color_array[i])  # Plot more data on the axes...
         #ax1.plot(frequency[i], s11_plot[i])  # Plot more data on the axes...
         #ax2.plot(frequency[i], s21_plot[i])  # Plot more data on the axes...
+        timeDomainDataRaw = frequency_dom_to_time_dom(s21_plot[i])
+        timeDomainData.append(timeDomainDataRaw[0:int(len(timeDomainDataRaw)/2)])
+        ax4.plot(range(len(timeDomainData[i])), timeDomainData[i], label="time", color=color_array[i])  # Plot more data on the axes...
+
 
     ax1.set_ylabel('RL (dB)')  # Add an x-label to the axes.
     ax1.set_xlim([0,40e6])
@@ -461,8 +500,10 @@ if __name__ == '__main__':
 
     #mixing segment line
     ax3.plot([0,args.length],[0,0], color="k")
+    color_index = 0
     for node in t.attach_points:
-        ax3.plot([node], np.zeros_like([node]), "-o")
+        ax3.plot([node], np.zeros_like([node]), "-o", color=color_array[color_index])
+        color_index += 1
     ax3.plot(t.attach_points[tx_index-1], np.zeros_like(t.attach_points[tx_index-1]),
             "-*",
             color="k",
@@ -482,6 +523,9 @@ if __name__ == '__main__':
 
     #add the drop lengths to the plot
     ax3.vlines(t.attach_points, 0, plot_drop, color="tab:red")
+
+    ax4.set_ylabel('Amplitude')  # Add an x-label to the axes.
+    ax4.set_xlabel('Time')  # Add a y-label to the axes.
 
     #save the plot as a png file incase another script is making a gif
     plt.savefig(args.plot_png_filename)
