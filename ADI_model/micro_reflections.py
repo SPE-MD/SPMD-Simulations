@@ -3,10 +3,10 @@ micro_reflections.py
 .. moduleauthor:: Scott Griffiths <stgriffi@ra.rockwell.com>
 
 Based on original Matlab code by Ragnar Jonsson found at:
-https://www.ieee802.org/3/cy/public/mar21/jonsson_3cy_01_03_16_21.m
+https://www.ieee802.org/3/cy/public/adhoc/jonsson_3cy_01_03_23_21.m
 
 and described in:
-https://www.ieee802.org/3/cy/public/mar21/jonsson_3cy_01_03_16_21.pdf
+https://www.ieee802.org/3/cy/public/adhoc/jonsson_3cy_01_03_23_21.pdf
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,98 +21,119 @@ import numpy as np
 import math
 
 
-def ureflections_test_1(f, s11, f_s=14062500000, N_bins=512, L_bin=4, N_discard=12):
+def micro_reflections(f, s11, N_bins, N_seg, N_discard, df_nonstandard=0):
     """
     Evaluates micro-reflections.
+
     Args:
         f -- a list of frequencies
         s11 -- S11 scattering parameters
-        N_bins -- the number of bins (default: 512)
-        L_bin (default: 4)
-        N_discard (default: 12)
+        N_bins -- the number of time domain bins used in the calculation (default: 512)
+        N_discard -- the number of segments to discard when computing REM and ETM
 
-    The function returns the metric value, residual, and h_echo.
-    This function does not do any plotting.
+    The parameter df_nonstandard can be used if the frequency sampling
+    of s11 is not according to specification. It defaults to 0.
+
+    The function returns the metric values and intermediate values.
+    Version 1.1 -- March 23, 2021
     """
-    # sampling interval and bin size
-    T = 1/f_s    # sampling interval
-    t_bin = L_bin * T
-    t_max = N_bins * L_bin * T
+    # number of samples to use
+    K_N = N_bins * N_seg
+    N_samples = 2*K_N   # even number of samples
 
-    # number of samples and time vector
-    N_samples = round(N_bins * L_bin) * 2   # even number of samples
-    t = np.arange(N_samples) * T
+    # experimental code to convert non-standard frequency sampling to standard
+    if df_nonstandard == 0:
+        fq = np.array(f)
+        sq = np.array(s11)
+    else:
+        fq = df_nonstandard * np.arange(0, K_N+1)
+        sq = cr_spline(f, s11, fq)
 
     # calculate echo impulse response and power
-    h_echo = cy_f2t(s11, f, T, N_samples)
+    h_echo = impulse_response_f2t(sq, fq, N_samples)
 
     # find power in each time bin
     h2 = h_echo**2
-    p_bin = np.zeros(N_bins)
+    P_k = np.zeros(N_bins)
     m1 = 0
     for n in range(N_bins):
         m0 = m1 + 1
-        m1 = round((n+1)*L_bin)
-        p_bin[n] = np.mean(h2[(m0-1):m1]) * L_bin
+        m1 = round((n+1)*N_seg)
+        P_k[n] = np.mean(h2[(m0-1):m1]) * N_seg
 
-    # calculate effect of increasing number of bins
-    p_sort = sorted(p_bin)
+    # find residual echo metric (REM)
+    sort_ix = np.argsort(P_k)
+    p_sort = P_k[sort_ix]
+    sort_ix = sort_ix[::-1]
     p_sum = np.cumsum(p_sort)
-    p_residual = p_sum[::-1]
+    REM = 10*np.log10(p_sum[::-1])
 
-    # convert to dB
-    REM = 10*np.log10(p_residual[N_discard-1])
-    return [REM, p_residual, h_echo]
+    # find residual echo RE_k
+    RE_k = P_k.copy()
+    RE_k[sort_ix[:N_discard]] = 0
+
+    # calculate echo tail metric (ETM)
+    tmp = np.cumsum(RE_k[::-1])
+    ETM = 10*np.log10(tmp[::-1])
+
+    return [REM, ETM, h_echo, sort_ix, P_k]
 
 
-def cy_f2t(H, f=None, T=1, N=256):
+def impulse_response_f2t(H, f, N):
     """
     Impulse (time) response for a given frequency response.
 
     Required Args:
         H -- the frequency response given at frequencies f
-
-    Keyword Args:
         f -- list of frequncies
-        T -- the sampling interval
         N -- the number of output samples (must be even)
     """
-    # find size
     H = np.array(H)
-    NN = H.size
+    N_H = H.size
 
-    # provide default frequency list, from 0 to pi
-    if f is None:
-        f = np.linspace(0, np.pi, num=NN)
+    # test arguments
+    if not all(np.isfinite(aa).flatten()):
+        raise ValueError('Signal has invalid samples')
 
-    N2 = math.ceil(N/2)
+    nonuniform_spacing = np.sum(np.abs(np.diff(np.abs(np.diff(f)))))
+    if abs(nonuniform_spacing) > 1e-6:
+        raise ValueError('Spacing of frequency points is not uniform')
 
-    H = H.transpose().flatten()
-    f = f.transpose().flatten()
-    assert len(H) == len(f)
+    if f[0] != 0:
+        raise ValueError('Frequency list does not start at DC (0 Hz)')
 
-    # interpolate frequency response
-    xq = np.linspace(0, 0.5, num=(N2 + 1))
-    Hs1 = cr_spline(f*T, H, xq)
-    ang_N = np.angle(Hs1[N2])
-    x0 = ang_N / np.pi
-    Hs1 = Hs1 * np.exp(-1j*2*np.pi*x0*xq)
-    Hs = np.concatenate((
-        [np.real(Hs1[0])],
-        Hs1[1:N2],
-        [np.real(Hs1[N2])],
-        np.conj(Hs1[N2-1:0:-1])
+    # re-shape arguments
+    E_k = H.flatten()
+    f = f.flatten()
+    assert len(E_k) == len(f)
+
+    # adjust phase of frequency response
+    K_N = math.ceil(N/2)
+
+    # SG: commented lines below are not needed for correct execution
+    # ang_N = np.angle(E_k[K_N])
+    # x0 = ang_N / np.pi
+    # xq = np.arange(K_N + 1) / K_N / 2
+    # E_k = E_k * np.exp(-1j*2*np.pi*x0*xq)[0]
+    # # what original Matlab code does:
+    # # E_k = np.outer(E_k, np.exp(-1j*2*np.pi*x0*xq))
+    # # E_k = E_k.flatten()
+
+    E_k[0] = np.real(E_k[0])
+    H_k = np.concatenate((
+        E_k[:K_N],
+        [np.real(E_k[K_N])],
+        np.conj(E_k[K_N-1:0:-1])
     ))
 
     # find impulse response from inverse FFT
-    h = np.real(np.fft.ifft(Hs))
-    return np.roll(h, -1)
+    h_n = np.real(np.fft.ifft(H_k))
+    return h_n
 
 
 def cr_spline(x, y, xq):
     """
-    Catmull-Rom spline
-        s = cr_ spline(f*T,H,[0:N2]/N2/2)
+    Catmull-Rom spline: s = cr_ spline(x, y, xq)
     See more at https://en.wikipedia.org/wiki/Cubic_Hermite_spline
     """
     # initialize
