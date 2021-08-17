@@ -28,13 +28,22 @@ def micro_reflections(f, s11, N_bins, N_seg, N_discard, df_nonstandard=0):
     Args:
         f -- a list of frequencies
         s11 -- S11 scattering parameters
-        N_bins -- the number of time domain bins used in the calculation (default: 512)
+        N_bins -- the number of time domain bins used in the calculation
         N_discard -- the number of segments to discard when computing REM and ETM
 
     The parameter df_nonstandard can be used if the frequency sampling
     of s11 is not according to specification. It defaults to 0.
 
-    The function returns the metric values and intermediate values.
+    Returns:
+        REM -- residual echo metric
+        ETM -- echo tail metric
+        h_echo -- impulse response computed from inverse FFT
+        sort_ix -- sorting indicies that can be applied to sort P_k
+        P_k -- power in each time bin
+
+    Note: sort_ix will differ from the Matlab code by 1 because Matlab arrays
+    are indexed from 1, whereas Python (numpy) arrays are indexed from zero.
+
     Version 1.1 -- March 23, 2021
     """
     # number of samples to use
