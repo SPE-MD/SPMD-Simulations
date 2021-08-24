@@ -101,7 +101,7 @@ def impulse_response_f2t(H, f, N):
     N_H = H.size
 
     # test arguments
-    if not all(np.isfinite(aa).flatten()):
+    if not all(np.isfinite(H).flatten()):
         raise ValueError('Signal has invalid samples')
 
     nonuniform_spacing = np.sum(np.abs(np.diff(np.abs(np.diff(f)))))
@@ -126,7 +126,7 @@ def impulse_response_f2t(H, f, N):
     # E_k = E_k * np.exp(-1j*2*np.pi*x0*xq)[0]
     # # what original Matlab code does:
     # # E_k = np.outer(E_k, np.exp(-1j*2*np.pi*x0*xq))
-    # # E_k = E_k.flatten()
+    # # E_k = E_k.transpose().flatten()
 
     E_k[0] = np.real(E_k[0])
     H_k = np.concatenate((
