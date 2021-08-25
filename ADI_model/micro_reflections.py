@@ -118,15 +118,11 @@ def impulse_response_f2t(H, f, N):
 
     # adjust phase of frequency response
     K_N = math.ceil(N/2)
-
-    # SG: commented lines below are not needed for correct execution
-    # ang_N = np.angle(E_k[K_N])
-    # x0 = ang_N / np.pi
-    # xq = np.arange(K_N + 1) / K_N / 2
-    # E_k = E_k * np.exp(-1j*2*np.pi*x0*xq)[0]
-    # # what original Matlab code does:
-    # # E_k = np.outer(E_k, np.exp(-1j*2*np.pi*x0*xq))
-    # # E_k = E_k.transpose().flatten()
+    ang_N = np.angle(E_k[K_N])
+    x0 = ang_N / np.pi
+    xq = np.arange(K_N + 1) / K_N / 2
+    E_k = np.outer(E_k, np.exp(-1j*2*np.pi*x0*xq))
+    E_k = E_k.transpose().flatten()
 
     E_k[0] = np.real(E_k[0])
     H_k = np.concatenate((
