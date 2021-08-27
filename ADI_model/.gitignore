@@ -5,6 +5,8 @@ zcable*
 cable.p
 *.plot
 *.gif
+makegif_*/
+
 
 #LT Spice Specific Ignores
 *.raw
