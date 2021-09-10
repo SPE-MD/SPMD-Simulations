@@ -12,8 +12,6 @@ from MultiDropTopologySpreadsheetImport import MultiDropSimulationNodeConfig
 
 from ConsensusModelSimulator import ConsensusModelSimulationResult
 
-from cmodel import 
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(

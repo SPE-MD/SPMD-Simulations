@@ -23,18 +23,18 @@ import colorsys
 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
 #import subprocess
-import runspice
-import mpUtil
-from ltcsimraw import ltcsimraw as ltcsimraw
+import adisimlib.runspice as runspice
+import adisimlib.mpUtil as mpUtil
+from adisimlib.ltcsimraw import ltcsimraw as ltcsimraw
 #from steptable import StepTable
-from spifile import SpiFile as SpiFile
+from adisimlib.spifile import SpiFile as SpiFile
 from micro_reflections import micro_reflections
 
-from cable import Cable as Cable
-from node import Node as Node
-from termination import Termination as Termination
-from transmitter import Transmitter as Transmitter
-from trunk import Trunk as Trunk
+from adisimlib.cable import Cable as Cable
+from adisimlib.node import Node as Node
+from adisimlib.termination import Termination as Termination
+from adisimlib.transmitter import Transmitter as Transmitter
+from adisimlib.trunk import Trunk as Trunk
 
 
 class ConsensusModelSimulator(object):
