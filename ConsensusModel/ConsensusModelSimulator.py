@@ -90,7 +90,8 @@ class ConsensusModelSimulator(object):
             zcable.write("vrtn rtn 0 0\n")
 
             #simulation command
-            zcable.write(".ac lin 400 1meg 40meg\n")
+            # zcable.write(".ac lin 400 1meg 40meg\n")
+            zcable.write(".ac lin 400 100k 40meg\n")
 
             #select nodes to save to speed up the sim and reduce file size
             zcable.write(".save v(*) i(*)\n")
