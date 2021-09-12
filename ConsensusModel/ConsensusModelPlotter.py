@@ -65,18 +65,35 @@ class ConsensusModelPlotter(object):
         self.csv_aoa = []
 
     def frequency_dom_to_time_dom(self, frequencies, s11Data):
-        N_samples = 256
+        N_samples = 800
         
         print("frequencies[0]")
         pprint(frequencies[0])
         print("s11Data[0]")
         pprint(s11Data[0])
-        
+
+        nonuniform_spacing = np.sum(np.abs(np.diff(np.abs(np.diff(frequencies)))))
+        if abs(nonuniform_spacing) > 1e-6:
+            print ("F Length: ",len(frequencies))
+            print("F Contents:\n",frequencies)
+            raise ValueError('Spacing of frequency points is not uniform')
+        else:
+            print ("F Length: ",len(frequencies))
+            frequency_spacing = frequencies[1] - frequencies[0]
+            print("Frequency Spacing: ", frequency_spacing, " Hz")
+            max_frequency = frequencies[len(frequencies)-1]
+            print("Max Frequency: ", max_frequency, " Hz")
+
         h_echo = micro_reflections(frequencies, s11Data, N_samples)
-        
+        sample_array = range(0,int(len(frequencies)))
+        t_echo = np.array(sample_array)/(2*max_frequency)
+
         print("h_echo[0]")
-        pprint(h_echo[0])
-        return h_echo
+        pprint(h_echo)
+        print("t_echo[0]")
+        pprint(t_echo)
+
+        return (t_echo, 20*np.log10(abs(h_echo[0:int(len(h_echo)/2)])))
 
     def return_loss_limit(self,freq):
         rl=[]
@@ -178,13 +195,13 @@ class ConsensusModelPlotter(object):
 
         self.rl_limit = self.return_loss_limit(self.frequency[0])
         self.il_limit = self.insertion_loss_limit(self.frequency[0])
-        timeDomainData = []
         # self.ax4.set_ylim([-5,10])
         
         for i,p in enumerate(self.frequency):
-            timeDomainDataRaw = self.frequency_dom_to_time_dom(self.frequency[i],self.s21_plot[i])
-            timeDomainData.append(20*np.log10(abs(timeDomainDataRaw[0:int(len(timeDomainDataRaw)/2)])))
-            self.ax4.plot(range(len(timeDomainData[i])), timeDomainData[i], label="time", color=color_array[i])  # Plot more data on the axes...
+            (timeDomainTimeAxis, timeDomainData) = self.frequency_dom_to_time_dom(self.frequency[i],self.s21_plot[i])
+            # self.ax4.plot(range(len(timeDomainData[i])), timeDomainData[i], label="time", color=color_array[i])  # Plot more data on the axes...
+            self.ax4.plot(timeDomainTimeAxis*1e6, timeDomainData, label="time (ms)", color=color_array[i])  # Plot more data on the axes...
+            #timeDomainTimeAxis
             
             # DC Point is garbage
             self.s21_plot[i][0] = 0
@@ -197,13 +214,6 @@ class ConsensusModelPlotter(object):
         self.ax2.plot(self.frequency[0], self.il_limit, label="clause 147 limit", color='k')  # Plot more data on the axes...
         self.ax1.plot(self.frequency[0], self.s11_plot[0], label="test", color='k')  # Plot more data on the axes...
         
-        for fdarr in self.s11_plot:
-            pprint(fdarr[0:5])
-
-
-        for tdarr in timeDomainData:
-            pprint(tdarr[0:5])
-
         self.ax1.set_ylabel('RL (dB)')  # Add an x-label to the axes.
         self.ax1.set_xlim([0,40e6])
         if(self.noautoscale):
@@ -252,7 +262,8 @@ class ConsensusModelPlotter(object):
         self.ax3.vlines(self.trunk.attach_points, 0, self.plot_drop, color="tab:red")
         
         self.ax4.set_ylabel('Amp (pseudo db)')  # Add an x-label to the axes.
-        self.ax4.set_xlabel('Time')  # Add a y-label to the axes.
+        self.ax4.set_xlabel('Time (us)')  # Add a y-label to the axes.
+        self.ax4.minorticks_on()
 
         #save the plot as a png file incase another script is making a gif
         plt.savefig(self.plot_png_filename)
