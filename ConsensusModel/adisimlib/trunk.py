@@ -202,7 +202,7 @@ class Trunk(object):
         #is there space between the start termination and the 1st node?
         if(self.attach_points[0] > 0):
             #make segment 0
-            t=Cable(name="trunk0",length=self.attach_points[0],port1="t0",port2="t1")
+            t=Cable(name="trunk0",length=self.attach_points[0],port1="t0a",port2="t0b")
             trunk_segments.append(t)
 
         for l in range(1,len(self.attach_points)):
@@ -211,8 +211,8 @@ class Trunk(object):
                 print("violation of min separation on segment %d" % l)
                 print("%.5f - %.5f" % (self.attach_points[l], self.attach_points[l-1]))
                 exit(1)
-            port1="t%d" % l
-            port2="t%d" % (l+1)
+            port1="t%da" % l
+            port2="t%db" % l
             t=Cable(name="trunk%d" % l,length=length,port1=port1 ,port2=port2)
             trunk_segments.append(t)
 
@@ -221,8 +221,8 @@ class Trunk(object):
             #make segment nsegs+1
             name="trunk%d" % (l+1)
             length = (self.length - self.attach_points[-1])
-            port1="t%d" % (l+1)
-            port2="t%d" % (l+2)
+            port1="t%da" % (l+1)
+            port2="t%db" % (l+1)
             t=Cable(name=name,length=length,port1=port1 ,port2=port2)
             trunk_segments.append(t)
         return trunk_segments

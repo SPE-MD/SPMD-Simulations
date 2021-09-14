@@ -35,6 +35,7 @@ from adisimlib.node import Node as Node
 from adisimlib.termination import Termination as Termination
 from adisimlib.transmitter import Transmitter as Transmitter
 from adisimlib.trunk import Trunk as Trunk
+from adisimlib.t_connector import T_connector as T_connector
 
 class MultidropSimulationNetwork(object):
     """Contains a single node from a multidrop network"""
@@ -229,26 +230,77 @@ class ConsensusModelTopologyBuilder(object):
                 , attach_error=self.args.attach_error
                 )
         trunk_segments = self.simNetwork.trunk.get_cable_segments()
-        # for x in trunk_segments:
-        #     print(x)
+        
+        #make a copy of the trunk segments list because it will be destroyed during the next step
+        trunk_temp = list(trunk_segments) 
+
+        self.simNetwork.mixing_segment = []
         
         ################################################################################
         #Connect termination Resistors (actually termination R/C) to then ends of
         #the trun
         ################################################################################
-        self.simNetwork.term_start = Termination(name="start_term", port=trunk_segments[0].port1, stim_port="start")
-        self.simNetwork.term_end   = Termination(name="end_term"  , port=trunk_segments[-1].port2, stim_port="end")
+        term_start = Termination(name="start_term", port=trunk_temp[0].port1, stim_port="start")
+        self.simNetwork.mixing_segment.append(term_start)
+        print(self.simNetwork.mixing_segment[-1])
+
+        nnodes=1
+        if(self.args.start_pad > 0):
+            self.simNetwork.mixing_segment.append(trunk_temp.pop(0))
+            print(self.simNetwork.mixing_segment[-1])
+            
+        while(trunk_temp):
+            port = "y%d" % nnodes
+            tee = T_connector(number=nnodes, port1=self.simNetwork.mixing_segment[-1].port2, port2=trunk_temp[0].port1, node_port=port)
+            nnodes+=1
+            self.simNetwork.mixing_segment.append(tee)
+            print(self.simNetwork.mixing_segment[-1])
+            self.simNetwork.mixing_segment.append(trunk_temp.pop(0))
+            print(self.simNetwork.mixing_segment[-1])
+
+        if(self.args.end_pad == 0):
+            port = "y%d" % nnodes
+            tee = T_connector(number=nnodes, port1=self.simNetwork.mixing_segment[-1].port2, port2="end", node_port=port)
+            nnodes+=1
+            self.simNetwork.mixing_segment.append(tee)
+            print(self.simNetwork.mixing_segment[-1])
+     
+        term_end   = Termination(name="end_term", port=self.simNetwork.mixing_segment[-1].port2, stim_port="end")
+        self.simNetwork.mixing_segment.append(term_end)
+        print(self.simNetwork.mixing_segment[-1])
 
         ################################################################################
-        #Attach nodes to the trunk
+        #Attach nodes to the mixing segment
         ################################################################################
         self.simNetwork.nodes = []
         for n in range(1,self.args.nodes+1):
-            port="t%d" % (n)
+            port="y%d" % (n)
             node = Node(number=n,port=port, drop_length=self.args.drop_max, random_drop=self.args.random_drop,
                     cnode=self.args.cnode, lpodl=self.args.lpodl, rnode=self.args.rnode)
             self.simNetwork.nodes.append(node)
+            print(node)
 
+
+        # for x in trunk_segments:
+        #     print(x)
+        
+#        ################################################################################
+#        #Connect termination Resistors (actually termination R/C) to then ends of
+#        #the trun
+#        ################################################################################
+#        self.simNetwork.term_start = Termination(name="start_term", port=trunk_segments[0].port1, stim_port="start")
+#        self.simNetwork.term_end   = Termination(name="end_term"  , port=trunk_segments[-1].port2, stim_port="end")
+#
+#        ################################################################################
+#        #Attach nodes to the trunk
+#        ################################################################################
+#        self.simNetwork.nodes = []
+#        for n in range(1,self.args.nodes+1):
+#            port="t%d" % (n)
+#            node = Node(number=n,port=port, drop_length=self.args.drop_max, random_drop=self.args.random_drop,
+#                    cnode=self.args.cnode, lpodl=self.args.lpodl, rnode=self.args.rnode)
+#            self.simNetwork.nodes.append(node)
+#
         ################################################################################
         #Determine which node will be the transmitter for the simulation
         ################################################################################
@@ -275,20 +327,16 @@ class ConsensusModelTopologyBuilder(object):
 
             trunk_segments = self.simNetwork.trunk.get_cable_segments()
 
-            for s in trunk_segments:
-                cable.write(s.subcircuit()+"\n")
+            for m in self.simNetwork.mixing_segment:
+                cable.write(m.subcircuit()+"\n")
             for n in self.simNetwork.nodes:
                 cable.write(n.subcircuit()+"\n")
 
-            cable.write(self.simNetwork.term_start.subcircuit()+"\n")
-            cable.write(self.simNetwork.term_end.subcircuit()+"\n")
             cable.write("** MAIN NETWORK DESCRIPTION **\n")
-            for s in trunk_segments:
-                cable.write(s.instance()+"\n")
+            for m in self.simNetwork.mixing_segment:
+                cable.write(m.instance()+"\n")
             for n in self.simNetwork.nodes:
                 cable.write(n.instance()+"\n")
-            cable.write(self.simNetwork.term_start.instance()+"\n")
-            cable.write(self.simNetwork.term_end.instance()+"\n")
    
 
 if __name__ == '__main__':
