@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import datetime
 import colorsys
 from pprint import pprint as pprint
+from scipy import constants
 #from multiprocessing import Process
 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
@@ -37,20 +38,40 @@ from adisimlib.termination import Termination as Termination
 from adisimlib.transmitter import Transmitter as Transmitter
 from adisimlib.trunk import Trunk as Trunk
 
-
-class ConsensusModelPlotter(object):
-    """Takes results and makes graphs"""
+class ConsensusModelPlotterConfig(object):
+    """Contains all the parameters used when plotting graphs"""
     def __init__(self):
-        self.results = None
-        self.nodes = None
-        self.tx_node = None
-        self.trunk = None
-
         self.noautoscale = None
         self.noautoscale = None
         self.length = None
         self.plot_png_filename = None
         self.noplot = None
+
+    def __str__(self):
+        returnString =  "\nPlotterConfig\n"
+        returnString += "noautoscale:       %d\n" % self.noautoscale
+        returnString += "noautoscale:       %s\n" % self.noautoscale
+        returnString += "length:            %s\n" % self.length
+        returnString += "plot_png_filename: %s\n" % self.plot_png_filename
+        returnString += "noplot:            %f\n" % self.noplot
+        return returnString
+
+    def configureWithCommandLineArguments(self,args):
+        self.noautoscale = args.noautoscale
+        self.length = args.length
+        self.plot_png_filename = args.plot_png_filename
+        self.noplot = args.noplot
+
+class ConsensusModelPlotter(object):
+    """Takes results and makes graphs"""
+    def __init__(self, topology=None, results=None):
+        self.topology = topology
+        self.results = results
+        self.nodes = None
+        self.tx_node = None
+        self.trunk = None
+
+        self.config = ConsensusModelPlotterConfig()
 
         ################################################################################
         #Set up containers to plot the output
@@ -64,13 +85,16 @@ class ConsensusModelPlotter(object):
         self.plot_drop = []
         self.csv_aoa = []
 
+    def configureWithCommandLineArguments(self,args):
+        self.config.configureWithCommandLineArguments(args)
+
     def frequency_dom_to_time_dom(self, frequencies, s11Data):
         N_samples = 800
         
-        print("frequencies[0]")
-        pprint(frequencies[0])
-        print("s11Data[0]")
-        pprint(s11Data[0])
+        # print("frequencies[0]")
+        # pprint(frequencies[0])
+        # print("s11Data[0]")
+        # pprint(s11Data[0])
 
         nonuniform_spacing = np.sum(np.abs(np.diff(np.abs(np.diff(frequencies)))))
         if abs(nonuniform_spacing) > 1e-6:
@@ -78,20 +102,20 @@ class ConsensusModelPlotter(object):
             print("F Contents:\n",frequencies)
             raise ValueError('Spacing of frequency points is not uniform')
         else:
-            print ("F Length: ",len(frequencies))
+            # print ("F Length: ",len(frequencies))
             frequency_spacing = frequencies[1] - frequencies[0]
-            print("Frequency Spacing: ", frequency_spacing, " Hz")
+            # print("Frequency Spacing: ", frequency_spacing, " Hz")
             max_frequency = frequencies[len(frequencies)-1]
-            print("Max Frequency: ", max_frequency, " Hz")
+            # print("Max Frequency: ", max_frequency, " Hz")
 
         h_echo = micro_reflections(frequencies, s11Data, N_samples)
         sample_array = range(0,int(len(frequencies)))
         t_echo = np.array(sample_array)/(2*max_frequency)
 
-        print("h_echo[0]")
-        pprint(h_echo)
-        print("t_echo[0]")
-        pprint(t_echo)
+        # print("h_echo[0]")
+        # pprint(h_echo)
+        # print("t_echo[0]")
+        # pprint(t_echo)
 
         return (t_echo, 20*np.log10(abs(h_echo[0:int(len(h_echo)/2)])))
 
@@ -137,6 +161,14 @@ class ConsensusModelPlotter(object):
         ################################################################################
         #Extract data from the rawfile
         ################################################################################
+
+        
+        self.nodes = self.topology.simNetwork.nodes
+        self.tx_node = self.topology.simNetwork.tx_node
+        self.transmitter = self.topology.simNetwork.transmitter
+        self.tx_index = self.topology.simNetwork.tx_index
+        self.trunk = self.topology.simNetwork.trunk
+
         for n in self.nodes:
             if n != self.tx_node:
                 sparams = self.results.scattering_parameters(
@@ -216,27 +248,27 @@ class ConsensusModelPlotter(object):
         
         self.ax1.set_ylabel('RL (dB)')  # Add an x-label to the axes.
         self.ax1.set_xlim([0,40e6])
-        if(self.noautoscale):
+        if(self.config.noautoscale):
             self.ax1.set_ylim([-70,10])
 
         self.ax2.set_ylabel('Rx/Tx (dB)')  # Add an x-label to the axes.
         self.ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
         self.ax2.set_xlim([0,40e6])
         
-        if(self.noautoscale):
+        if(self.config.noautoscale):
             # if True:
             self.ax2.set_ylim([-20,10])
         self.ax1.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
 
-        #self.ax3.set_xlim([-1,int(self.length)+1])
-        if(self.noautoscale):
+        #self.ax3.set_xlim([-1,int(self.config.length)+1])
+        if(self.config.noautoscale):
             self.ax3.set_xlim([-1,101])
         self.ax3.set_ylim([-1,1])
         self.ax3.set_xlabel('Attach (m)')  # Add a x-label to the axes.
         self.ax3.set_ylabel('Drop (m)')  # Add a x-label to the axes.
 
         #mixing segment line
-        self.ax3.plot([0,self.length],[0,0], color="k")
+        self.ax3.plot([0,self.config.length],[0,0], color="k")
         color_index = 0
         for node in self.trunk.attach_points:
             self.ax3.plot([node], np.zeros_like([node]), "-o", color=color_array[color_index])
@@ -264,9 +296,21 @@ class ConsensusModelPlotter(object):
         self.ax4.set_ylabel('Amp (pseudo db)')  # Add an x-label to the axes.
         self.ax4.set_xlabel('Time (us)')  # Add a y-label to the axes.
         self.ax4.minorticks_on()
+        cable_velocity_factor = 0.75
+        segment_propagation_time = self.config.length / (constants.speed_of_light * cable_velocity_factor)
+        xticks = np.arange(0,timeDomainTimeAxis[len(timeDomainTimeAxis)-1]*1e6,segment_propagation_time*1e6)
+        # print("xticks")
+        # print(xticks)
+        
+        #draw xticks every full cable length  propagation time interval
+        self.ax4.set_xticks(xticks,minor=True)
+        self.ax4.set_xticklabels(["%d OWT" % x for x in range(len(xticks))],minor=True)
+        self.ax4.xaxis.set_tick_params(which='minor', direction='in', pad=-20, labelbottom=False, labeltop=False, rotation=0)
+        self.ax4.grid(axis='x', which='minor')
+        # self.ax4.set_xticks([0.35,0.7,1.05],minor=True)
 
         #save the plot as a png file incase another script is making a gif
-        plt.savefig(self.plot_png_filename)
-        if not self.noplot:
+        plt.savefig(self.config.plot_png_filename)
+        if not self.config.noplot:
             print("#Close plot window to continue")
             plt.show()

@@ -39,12 +39,11 @@ from adisimlib.trunk import Trunk as Trunk
 
 class ConsensusModelSimulator(object):
     """Stores topology, runs sim, stores results"""
-    def __init__(self):
+    def __init__(self, topology=None):
         self.network = None
         self.results = None
         self.design_md5 = None
-        self.transmitter = None
-        self.nodes = None
+        self.topology = topology
 
     def getResults(self):
         self.results = ltcsimraw(self.rawSave)
@@ -79,12 +78,13 @@ class ConsensusModelSimulator(object):
         # transient simulations.  Then another transient stimulus file will be
         # created
         ################################################################################
+
         with open("zcable.ac.cir", 'w') as zcable:
             zcable.write("*ac sim command for cable impedance measurement\n")
             zcable.write(".include cable.p\n")
 
             #differential signal input
-            zcable.write(self.transmitter.instance()+"\n")
+            zcable.write(self.topology.simNetwork.transmitter.instance()+"\n")
 
             #path to ground
             zcable.write("vrtn rtn 0 0\n")
@@ -95,7 +95,7 @@ class ConsensusModelSimulator(object):
 
             #select nodes to save to speed up the sim and reduce file size
             zcable.write(".save v(*) i(*)\n")
-            for n in self.nodes:
+            for n in self.topology.simNetwork.nodes:
                 zcable.write("+ %s\n" % n.termination_current())
 
 

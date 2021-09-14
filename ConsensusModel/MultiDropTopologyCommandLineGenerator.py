@@ -36,12 +36,13 @@ from adisimlib.termination import Termination as Termination
 from adisimlib.transmitter import Transmitter as Transmitter
 from adisimlib.trunk import Trunk as Trunk
 
-from MultiDropTopologySpreadsheetImport import MultidropSimulationNetwork
-from MultiDropTopologySpreadsheetImport import CableSegmentModelConfig
-from MultiDropTopologySpreadsheetImport import MultiDropSimulationNodeConfig
+from ConsensusModelTopologyBuilder import MultidropSimulationNetworkSpreadsheetDescription
+from ConsensusModelTopologyBuilder import CableSegmentModelConfig
+from ConsensusModelTopologyBuilder import MultiDropSimulationNodeConfig
 
 from ConsensusModelSimulator import ConsensusModelSimulator
 from ConsensusModelPlotter import ConsensusModelPlotter
+from ConsensusModelTopologyBuilder import ConsensusModelTopologyBuilder
 
 if __name__ == '__main__':
 
@@ -173,112 +174,17 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    ###
-    #Setup random seed in case this run has random parameters
-    ###
-    seed = args.seed
-    if seed == -1:
-        tim = datetime.datetime.now()
-        seed = tim.hour*10000+tim.minute*100+tim.second
-        random.seed(seed)
-    else:
-        random.seed(seed)
-    print("#Random Seed = %s" % seed)
+    print ("Building Topology")
 
-    #tpd=3.335e-9      #speed of light on this cable
-    #z0 = 100          #cable impedance
-    #l_m = tpd * z0    #inductance per meter
-    #c_m = tpd / z0    #capacitance per meter
-    #r_m = 0.188       #dc resistance per meter
-    #r_m = 0.001       #dc resistance per meter
+    topology = ConsensusModelTopologyBuilder()
 
-    #18 awg l and c data for a 5cm segment
-    #l1 a t2p {1*20.6435n}
-    #c1 t2p x {1*2.25026p}
-    #l_m = 20.6435e-09 / 0.05
-    #c_m = 2.25026e-12 / 0.05
+    topology.buildFromCommandLineArguments(args)
 
-    #llump = l_m / args.segments_per_meter
-    #clump = c_m / args.segments_per_meter
-    #rlump = r_m / args.segments_per_meter 
+    print ("Rendering Netlist")
+    topology.renderNetlist()
 
-    ################################################################################
-    #Make trunk segments that will connect the nodes
-    ################################################################################
-    t=Trunk( length=args.length
-            , nodes=args.nodes
-            , start_pad=args.start_pad
-            , end_pad=args.end_pad
-            , separation_min=args.separation_min
-            , start_attach=args.start_attach
-            , end_attach=args.start_attach
-            , random_attach=args.random_attach
-            , attach_error=args.attach_error
-            )
-    trunk_segments = t.get_cable_segments()
-    for x in trunk_segments:
-        print(x)
-    
-    ################################################################################
-    #Connect termination Resistors (actually termination R/C) to then ends of
-    #the trun
-    ################################################################################
-    term_start = Termination(name="start_term", port=trunk_segments[0].port1, stim_port="start")
-    term_end   = Termination(name="end_term"  , port=trunk_segments[-1].port2, stim_port="end")
+    sim = ConsensusModelSimulator(topology)
 
-    ################################################################################
-    #Attach nodes to the trunk
-    ################################################################################
-    nodes = []
-    for n in range(1,args.nodes+1):
-        port="t%d" % (n)
-        node = Node(number=n,port=port, drop_length=args.drop_max, random_drop=args.random_drop,
-                cnode=args.cnode, lpodl=args.lpodl, rnode=args.rnode)
-        nodes.append(node)
-
-    ################################################################################
-    #Determine which node will be the transmitter for the simulation
-    ################################################################################
-    #boundary check the transmit node index
-    tx_node = args.tx_node
-    if tx_node<1: #choose a random transmit node
-        tx_node = random.randint(1,args.nodes)
-        print("Randomly Chose Node %d as the transmitter" % tx_node)
-    tx_index=min(tx_node, args.nodes)
-    tx_index=max(tx_index, 1)
-    tx_node = nodes[tx_index-1]
-    transmitter = Transmitter(port=tx_node.phy_port)
-        
-    ################################################################################
-    #Write a spice file with the system setup
-    ################################################################################
-    with open("cable.p", 'w') as cable:
-        cable.write("*lumped transmission line model with %d segments per meter at %d meters\n"\
-        % (args.segments_per_meter, args.length))
-        cable.write("*and a %f meter long cable\n" % args.length)
-        cable.write(".include tlump2.p\n")
-        cable.write(".include node.p\n")
-
-        for s in trunk_segments:
-            cable.write(s.subcircuit()+"\n")
-        for n in nodes:
-            cable.write(n.subcircuit()+"\n")
-
-        cable.write(term_start.subcircuit()+"\n")
-        cable.write(term_end.subcircuit()+"\n")
-        cable.write("** MAIN NETWORK DESCRIPTION **\n")
-        for s in trunk_segments:
-            cable.write(s.instance()+"\n")
-        for n in nodes:
-            cable.write(n.instance()+"\n")
-        cable.write(term_start.instance()+"\n")
-        cable.write(term_end.instance()+"\n")
-
-    sim = ConsensusModelSimulator()
-
-    sim.transmitter = transmitter
-    sim.nodes = nodes
-    
     print ("Running Sim")
     sim.run()
     print ("Done Running Sim")
@@ -287,21 +193,9 @@ if __name__ == '__main__':
     simulationResult = sim.getResults()
 
     print ("Plotting results...")
-    plotter = ConsensusModelPlotter()
-
-    plotter.results = simulationResult
-    plotter.nodes = nodes
-    plotter.tx_node = tx_node
-    plotter.transmitter = transmitter
-    plotter.tx_index = tx_index
-    plotter.trunk = t
-
-
-    plotter.noautoscale = args.noautoscale
-    plotter.noautoscale = args.noautoscale
-    plotter.length = args.length
-    plotter.plot_png_filename = args.plot_png_filename
-    plotter.noplot = args.noplot
+    plotter = ConsensusModelPlotter(topology, simulationResult)
+    
+    plotter.configureWithCommandLineArguments(args)
 
     print ("Plotting Plots")
     plotter.generatePlots()

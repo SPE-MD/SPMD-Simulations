@@ -78,9 +78,9 @@ def impulse_response_f2t(H, f, N):
         f = np.insert(f,0,0)
         H = np.insert(H,0,0)
         N_H += 1
-        print ("firstPointIsGarbage")
-        print (f[0])
-        print (H[0])
+        # print ("firstPointIsGarbage")
+        # print (f[0])
+        # print (H[0])
         firstPointIsGarbage = True
     
     # test arguments
@@ -120,8 +120,8 @@ def impulse_response_f2t(H, f, N):
     # find impulse response from inverse FFT
     h_n = np.real(np.fft.ifft(H_k))
 
-    if firstPointIsGarbage:
-        h_n[0] = 0
+    # if firstPointIsGarbage:
+    #     h_n[0] = 0
     return h_n
 
 
