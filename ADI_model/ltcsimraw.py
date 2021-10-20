@@ -350,6 +350,22 @@ class ltcsimraw():
             "zin_phase" : zin_phase,
             }
 
+    def fft_transfer(self, fft, vport1, vport2):
+        (data,labels) = self.getSignals([],[],[vport1[0],vport1[1],vport2[0],vport2[1]])
+        index = dict(zip(labels, range(0,len(labels))))
+        #print(labels)
+        #frequency=[]
+        fft_out = [0]
+        for i in range(0,len(data)):
+            vend   = data[i][index[vport2[0]]]-data[i][index[vport2[1]]]
+            vin    = data[i][index[vport1[0]]]-data[i][index[vport1[1]]]
+            #gain_mp = self.decodeComplex(vend/vin)
+            phasor_out = fft[i+1] * (vend/vin)
+            fft_out.append(phasor_out)
+            #frequency.append(data[i][0])
+
+        return fft_out
+
     #changes the data from an aoa to an array of strings suitable for feeding to
     #gnuplot
     def setGnuplotFormat(self,sig,labels):

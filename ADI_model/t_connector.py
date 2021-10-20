@@ -17,38 +17,38 @@ import random
 import numpy as np
 import math
 
-class Termination(object):
+class T_connector(object):
     """Object representing a mixing segment trunk termination
 
     name            name of the cable segment.  This will be the name of the instance and the subcircuit
-    port            the name of the port connection, for example "t1"
-                    the connections at the port of this cable will then be called t1p and t1n
-    stim_port       the name of the stimulus port connection, for example "ts"
-                    the connections at the port of this cable will then be called t1p and t1n
-                    this connects directly to a termination resistor.  This is
-                    where a tx or rx would connect
+    port1           the name of the port connection, for example "t1" the connections at the port of this cable will then be called t1p and t1n
+    port2           the name of the port connection, for example "t1" the connections at the port of this cable will then be called t1p and t1n
+    node_port       the name of the port connection, for example "t1" the connections at the port of this cable will then be called t1p and t1n
     """
 
-    def __init__(self, name="term0", port="t0", stim_port="ts", rterm=100, ccouple=220e-9):
-        self.name = name
-        self.port = port
-        self.port1 = port
-        self.port2 = port
-        self.stim_port = stim_port
-        self.rterm = rterm
-        self.ccouple = ccouple
+    def __init__(self, number=1, port1="t1b", port2="t2a", node_port='y1', subcircuit=None ,lcomp=50e-9):
+        self.number = number
+        self.name = "tee%d" % number
+        self.port1 = port1
+        self.port2 = port2
+        self.node_port = node_port
+        self.rconn=0.010
+        self.lcomp=lcomp
 
     def subcircuit(self):
         """Generate the subcircuit definition for this cable segment"""
         netlist = [self.__str__()]
 
-        netlist.append(".subckt %s p n sp sn rtn" % (self.name))
+        netlist.append(".subckt %s ip in op on np nn rtn" % (self.name))
 
         #generate the body of the cable
-        netlist.append("ccp p sp %g" % self.ccouple)
-        netlist.append("ccn sn n %g" % self.ccouple)
-        netlist.append("rp sp rtn %g" % (self.rterm /2))
-        netlist.append("rn rtn sn %g" % (self.rterm /2))
+        netlist.append("l1p ip p %g rser=%g" % (self.lcomp, self.rconn))
+        netlist.append("l1n in n %g rser=%g" % (self.lcomp, self.rconn))
+        netlist.append("l2p p op %g rser=%g" % (self.lcomp, self.rconn))
+        netlist.append("l2n n on %g rser=%g" % (self.lcomp, self.rconn))
+
+        netlist.append("r3p p np %g" % self.rconn)
+        netlist.append("r3n n nn %g" % self.rconn)
 
         netlist.append(".ends %s" % self.name)
         return "\n".join(netlist)
@@ -56,32 +56,27 @@ class Termination(object):
     def __str__(self):
         s = [
              "**********************"
-            ,"* name    %s" % self.name
-            ,"* rterm   %s" % self.rterm
-            ,"* ccouple %s" % self.ccouple
-            ,"* port    %s" % self.port
+            ,"* name        %s" % self.name
+            ,"* port1       %s" % self.port1
+            ,"* port2       %s" % self.port2
+            ,"* node_port   %s" % self.node_port
             ,"**********************"
             ]
         return "\n".join(s)
 
     def instance(self):
         """Generate the instance call for this cable segment"""
-        return "x%s %sp %sn %sp %sn rtn %s" % \
+        return "x%s %sp %sn %sp %sn %sp %sn rtn %s" % \
                 (
                     self.name,
-                    self.port, self.port,
-                    self.stim_port, self.stim_port,
+                    self.port1, self.port1,
+                    self.port2, self.port2,
+                    self.node_port, self.node_port,
                     self.name
                 )
-    def termination_resistor(self):
-        return "%s:rp" % self.name
-
-    def termination_resistor_current(self):
-        return "I(%s)" % self.termination_resistor()
-
 
 if __name__ == '__main__':
     t0 = Termination(name="t0",port="t0", stim_port="ts")
     print(t0.subcircuit())
     print(t0.instance())
-    print(t0.termination_resistor_current())
+    print(t0.termination_resistor_current())#! /usr/bin/env python3

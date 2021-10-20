@@ -28,18 +28,20 @@ import mpUtil
 from ltcsimraw import ltcsimraw as ltcsimraw
 #from steptable import StepTable
 from spifile import SpiFile as SpiFile
-from micro_reflections import cy_f2t
+from micro_reflections import micro_reflections
 
 from cable import Cable as Cable
 from node import Node as Node
 from termination import Termination as Termination
 from transmitter import Transmitter as Transmitter
 from trunk import Trunk as Trunk
+from t_connector import T_connector as T_connector
+from dme import dme_wave as dme_wave
 
 
 
 def frequency_dom_to_time_dom(data):
-    return cy_f2t(data, T=0.10, N=256)
+    return micro_reflections(data, T=0.10, N=256)
 
 def return_loss_limit(freq):
     rl=[]
@@ -132,6 +134,11 @@ if __name__ == '__main__':
             default=50
             )
 
+    parser.add_argument('--lcomp', type=float, \
+            help='Compensation inductance added to tconnector ports',
+            default=50e-9
+            )
+
     parser.add_argument('--segments_per_meter', type=int, \
             help='Size of finite element cable model segments.  Be sure this\
             lines up with lump models',\
@@ -210,8 +217,27 @@ if __name__ == '__main__':
             default=0
             )
 
-    args = parser.parse_args()
+    parser.add_argument('--fft', type=str, \
+            help='fft of and input signal in text form to be multiplied against the insertion loss\
+            then ifft is applied to reconstruct the time domain signal shape',
+            default=None
+            )
 
+    parser.add_argument('--attach_points', type=float, nargs='+',\
+            help='specify the mixing segment attachment points with a space separated list\
+            --nodes is overridden by the length of this list.  Make sure this list is ordered',\
+            default=None
+            )
+
+    parser.add_argument('--eye_adjust', type=float, nargs=2,\
+            help='adjust eye diagram delay, set the delay to be positive because the parser cannot handle\
+            negative numbers',
+            default=[0,0]
+            )
+
+
+
+    args = parser.parse_args()
     ###
     #Setup random seed in case this run has random parameters
     ###
@@ -223,6 +249,7 @@ if __name__ == '__main__':
     else:
         random.seed(seed)
     print("#Random Seed = %s" % seed)
+
 
     #tpd=3.335e-9      #speed of light on this cable
     #z0 = 100          #cable impedance
@@ -244,7 +271,9 @@ if __name__ == '__main__':
     ################################################################################
     #Make trunk segments that will connect the nodes
     ################################################################################
-    t=Trunk( length=args.length
+    if(args.attach_points):
+        args.nodes = len(args.attach_points)
+    trunk=Trunk( length=args.length
             , nodes=args.nodes
             , start_pad=args.start_pad
             , end_pad=args.end_pad
@@ -253,27 +282,58 @@ if __name__ == '__main__':
             , end_attach=args.start_attach
             , random_attach=args.random_attach
             , attach_error=args.attach_error
+            , attach_points=args.attach_points
             )
-    trunk_segments = t.get_cable_segments()
-    for x in trunk_segments:
-        print(x)
+    trunk_segments = trunk.get_cable_segments()
+    
+    mixing_segment = []
+    
+    #make a copy of the trunk segments list because it will be destroyed during the next step
+    trunk_temp = list(trunk_segments) 
     
     ################################################################################
     #Connect termination Resistors (actually termination R/C) to then ends of
     #the trun
     ################################################################################
-    term_start = Termination(name="start_term", port=trunk_segments[0].port1, stim_port="start")
-    term_end   = Termination(name="end_term"  , port=trunk_segments[-1].port2, stim_port="end")
+    term_start = Termination(name="start_term", port=trunk_temp[0].port1, stim_port="start")
+    mixing_segment.append(term_start)
+    print(mixing_segment[-1])
+
+    nnodes=1
+    if(args.start_pad > 0):
+        mixing_segment.append(trunk_temp.pop(0))
+        print(mixing_segment[-1])
+        
+    while(trunk_temp):
+        port = "y%d" % nnodes
+        tee = T_connector(number=nnodes, port1=mixing_segment[-1].port2, port2=trunk_temp[0].port1, node_port=port, lcomp=args.lcomp)
+        nnodes+=1
+        mixing_segment.append(tee)
+        print(mixing_segment[-1])
+        mixing_segment.append(trunk_temp.pop(0))
+        print(mixing_segment[-1])
+
+    if(args.end_pad == 0):
+        port = "y%d" % nnodes
+        tee = T_connector(number=nnodes, port1=mixing_segment[-1].port2, port2="end", node_port=port, lcomp=args.lcomp)
+        nnodes+=1
+        mixing_segment.append(tee)
+        print(mixing_segment[-1])
+ 
+    term_end   = Termination(name="end_term", port=mixing_segment[-1].port2, stim_port="end")
+    mixing_segment.append(term_end)
+    print(mixing_segment[-1])
 
     ################################################################################
-    #Attach nodes to the trunk
+    #Attach nodes to the mixing segment
     ################################################################################
     nodes = []
     for n in range(1,args.nodes+1):
-        port="t%d" % (n)
+        port="y%d" % (n)
         node = Node(number=n,port=port, drop_length=args.drop_max, random_drop=args.random_drop,
                 cnode=args.cnode, lpodl=args.lpodl, rnode=args.rnode)
         nodes.append(node)
+        print(node)
 
     ################################################################################
     #Determine which node will be the transmitter for the simulation
@@ -298,20 +358,16 @@ if __name__ == '__main__':
         cable.write(".include tlump2.p\n")
         cable.write(".include node.p\n")
 
-        for s in trunk_segments:
-            cable.write(s.subcircuit()+"\n")
+        for m in mixing_segment:
+            cable.write(m.subcircuit()+"\n")
         for n in nodes:
             cable.write(n.subcircuit()+"\n")
 
-        cable.write(term_start.subcircuit()+"\n")
-        cable.write(term_end.subcircuit()+"\n")
         cable.write("** MAIN NETWORK DESCRIPTION **\n")
-        for s in trunk_segments:
-            cable.write(s.instance()+"\n")
+        for m in mixing_segment:
+            cable.write(m.instance()+"\n")
         for n in nodes:
             cable.write(n.instance()+"\n")
-        cable.write(term_start.instance()+"\n")
-        cable.write(term_end.instance()+"\n")
 
     ################################################################################
     #Create an ac stimulus file
@@ -330,7 +386,7 @@ if __name__ == '__main__':
         zcable.write("vrtn rtn 0 0\n")
 
         #simulation command
-        zcable.write(".ac lin 400 1meg 40meg\n")
+        zcable.write(".ac lin 4096 10k 40.96meg\n")
 
         #select nodes to save to speed up the sim and reduce file size
         zcable.write(".save v(*) i(*)\n")
@@ -397,7 +453,8 @@ if __name__ == '__main__':
     #Set up containers to plot the output
     ################################################################################
     #containers to hold output data for plotting
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4,1, figsize=(9, 9))  # Create a figure and an axes.
+    fig, (ax1, ax2, ax3) = plt.subplots(3,1, figsize=(9, 9))  # Create a figure and an axes.
+    fig2, eye_plots = plt.subplots(1,2, figsize=(18, 9))  # Create a figure and an axes.
     frequency = []
     s11_plot  = []
     s21_plot  = []
@@ -474,9 +531,9 @@ if __name__ == '__main__':
         ax2.plot(frequency[i], s21_plot[i], label="test", color=color_array[i])  # Plot more data on the axes...
         #ax1.plot(frequency[i], s11_plot[i])  # Plot more data on the axes...
         #ax2.plot(frequency[i], s21_plot[i])  # Plot more data on the axes...
-        timeDomainDataRaw = frequency_dom_to_time_dom(s21_plot[i])
-        timeDomainData.append(timeDomainDataRaw[0:int(len(timeDomainDataRaw)/2)])
-        ax4.plot(range(len(timeDomainData[i])), timeDomainData[i], label="time", color=color_array[i])  # Plot more data on the axes...
+        #timeDomainDataRaw = frequency_dom_to_time_dom(s21_plot[i])
+        #timeDomainData.append(timeDomainDataRaw[0:int(len(timeDomainDataRaw)/2)])
+        #ax4.plot(range(len(timeDomainData[i])), timeDomainData[i], label="time", color=color_array[i])  # Plot more data on the axes...
 
 
     ax1.set_ylabel('RL (dB)')  # Add an x-label to the axes.
@@ -493,7 +550,8 @@ if __name__ == '__main__':
 
     #ax3.set_xlim([-1,int(args.length)+1])
     if(args.noautoscale):
-        ax3.set_xlim([-1,101])
+        pass
+        #ax3.set_xlim([-1,101])
     ax3.set_ylim([-1,1])
     ax3.set_xlabel('Attach (m)')  # Add a x-label to the axes.
     ax3.set_ylabel('Drop (m)')  # Add a x-label to the axes.
@@ -501,10 +559,10 @@ if __name__ == '__main__':
     #mixing segment line
     ax3.plot([0,args.length],[0,0], color="k")
     color_index = 0
-    for node in t.attach_points:
+    for node in trunk.attach_points:
         ax3.plot([node], np.zeros_like([node]), "-o", color=color_array[color_index])
         color_index += 1
-    ax3.plot(t.attach_points[tx_index-1], np.zeros_like(t.attach_points[tx_index-1]),
+    ax3.plot(trunk.attach_points[tx_index-1], np.zeros_like(trunk.attach_points[tx_index-1]),
             "-*",
             color="k",
             markerfacecolor="k",
@@ -522,10 +580,57 @@ if __name__ == '__main__':
             plot_drop.append(node.drop_length)
 
     #add the drop lengths to the plot
-    ax3.vlines(t.attach_points, 0, plot_drop, color="tab:red")
+    ax3.vlines(trunk.attach_points, 0, plot_drop, color="tab:red")
 
-    ax4.set_ylabel('Amplitude')  # Add an x-label to the axes.
-    ax4.set_xlabel('Time')  # Add a y-label to the axes.
+    #ax4.set_ylabel('Amplitude')  # Add an x-label to the axes.
+    #ax4.set_xlabel('Time')  # Add a y-label to the axes.
+
+    print("#Generating Random DME Signals")
+    dme_signals = []
+    for i in range(0,5):
+        dme_signals.append(dme_wave())
+
+    print("#Generating Eye Diagrams")
+    eye_nodes = [nodes[1], nodes[-1]]
+    try :
+        for z,n in enumerate(eye_nodes):
+            xt = []
+            yt = []
+            for dme in dme_signals:
+                if n != tx_node:
+                    fft_out = rf.fft_transfer(
+                            dme.fft_value,
+                            tx_node.phy_port_voltage(),
+                            n.phy_port_voltage())
+
+                    signal = np.fft.irfft(fft_out)
+                    t=args.eye_adjust[z] #-18e-9
+                    lap=500e-9
+
+                    for i in range(0,len(signal)):
+                        tn = i/81.92e6
+                        if (tn - t) > lap:
+                           t+=lap
+                           xt.append(float('NaN'))
+                           yt.append(float('NaN'))
+                           #print("")
+                        #print("%.12f %.12f" % (tn-t, signal[i]))
+                        yt.append(signal[i])
+                        xt.append(tn-t)
+
+            s = "Node %d" % n.number
+            print("AAAAA")
+            eye_plots[z].set_title(s)
+            eye_plots[z].set_xlim([-10e-9,90e-9])
+            eye_plots[z].set_ylim([-0.8,0.8])
+            eye_plots[z].grid(b=True)
+            eye_plots[z].scatter(xt, yt, s=1, color=color_array[n.number-1])  # Plot more data on the axes...
+        #eye.plot(xt, yt)  # Plot more data on the axes...
+    except Exception as e:
+        print(e)
+        print("issues generating eye diagram")
+
+
 
     #save the plot as a png file incase another script is making a gif
     plt.savefig(args.plot_png_filename)

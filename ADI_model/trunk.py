@@ -108,7 +108,7 @@ class Trunk(object):
     """
 
     def __init__(self, name="trunk" ,length=10, nodes=16, gage=18, max_seg_length=0.05, separation_min=1, random_seed=-1, start_pad=0, end_pad=0\
-            , start_attach=0, end_attach=0, random_attach=True, attach_error=0):
+            , start_attach=0, end_attach=0, random_attach=True, attach_error=0, attach_points=None):
         self.name = name
         self.length = length
         self.gage = gage
@@ -124,30 +124,34 @@ class Trunk(object):
         attach_end = length-end_pad
         end = []
         start = []
-        if(end_attach <= unattached and end_attach > 0):
-            nend = end_attach
-            end = self.end_attach(attach_end, nend , separation_min)
-            unattached -= nend
-            attach_end = end[0]-separation_min
+        if(attach_points == None):
+            if(end_attach <= unattached and end_attach > 0):
+                nend = end_attach
+                end = self.end_attach(attach_end, nend , separation_min)
+                unattached -= nend
+                attach_end = end[0]-separation_min
 
-        if(start_attach <= unattached and start_attach > 0):
-            nstart = start_attach
-            start = self.start_attach(attach_start, nstart, separation_min)
-            unattached -= nstart
-            #print(attach_start)
-            attach_start = start[-1]+separation_min
+            if(start_attach <= unattached and start_attach > 0):
+                nstart = start_attach
+                start = self.start_attach(attach_start, nstart, separation_min)
+                unattached -= nstart
+                #print(attach_start)
+                attach_start = start[-1]+separation_min
 
-        mid = []
-        if(random_attach):
-            #print(attach_start)
-            #print(attach_end)
-            mid=self.distribute_pds_random(attach_start,attach_end, unattached,
-                    separation_min)
+            mid = []
+            if(random_attach):
+                #print(attach_start)
+                #print(attach_end)
+                mid=self.distribute_pds_random(attach_start,attach_end, unattached,
+                        separation_min)
+            else:
+                mid=self.distribute_pds_even(attach_start, attach_end, unattached,
+                        separation_min)
+
+            self.attach_points = start + mid + end
         else:
-            mid=self.distribute_pds_even(attach_start, attach_end, unattached,
-                    separation_min)
-
-        self.attach_points = start + mid + end
+            self.attach_points = attach_points
+        print(self.attach_points)
 
     def distribute_pds_random(self, attach_start, attach_end, nodes, separation_min):
         #remove start and end pads from the total length before 
@@ -202,17 +206,18 @@ class Trunk(object):
         #is there space between the start termination and the 1st node?
         if(self.attach_points[0] > 0):
             #make segment 0
-            t=Cable(name="trunk0",length=self.attach_points[0],port1="t0",port2="t1")
+            t=Cable(name="trunk0",length=self.attach_points[0],port1="t0a",port2="t0b")
             trunk_segments.append(t)
 
+        print(len(self.attach_points))
         for l in range(1,len(self.attach_points)):
             length = self.attach_points[l] - self.attach_points[l-1]
             if length < self.separation_min:
                 print("violation of min separation on segment %d" % l)
                 print("%.5f - %.5f" % (self.attach_points[l], self.attach_points[l-1]))
                 exit(1)
-            port1="t%d" % l
-            port2="t%d" % (l+1)
+            port1="t%da" % l
+            port2="t%db" % l
             t=Cable(name="trunk%d" % l,length=length,port1=port1 ,port2=port2)
             trunk_segments.append(t)
 
@@ -221,8 +226,8 @@ class Trunk(object):
             #make segment nsegs+1
             name="trunk%d" % (l+1)
             length = (self.length - self.attach_points[-1])
-            port1="t%d" % (l+1)
-            port2="t%d" % (l+2)
+            port1="t%da" % (l+1)
+            port2="t%db" % (l+1)
             t=Cable(name=name,length=length,port1=port1 ,port2=port2)
             trunk_segments.append(t)
         return trunk_segments

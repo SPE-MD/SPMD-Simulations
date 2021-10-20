@@ -97,6 +97,8 @@ class Cable(object):
             ,"* nsegs   %f" % self.nsegs
             ,"* whole   %f" % self.whole
             ,"* part    %f" % self.part
+            ,"* port1   %s" % self.port1
+            ,"* port2   %s" % self.port2
             ,"**********************"
             ]
         return "\n".join(s)
