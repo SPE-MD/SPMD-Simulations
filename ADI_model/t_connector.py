@@ -24,9 +24,11 @@ class T_connector(object):
     port1           the name of the port connection, for example "t1" the connections at the port of this cable will then be called t1p and t1n
     port2           the name of the port connection, for example "t1" the connections at the port of this cable will then be called t1p and t1n
     node_port       the name of the port connection, for example "t1" the connections at the port of this cable will then be called t1p and t1n
+    lcomp           compensation inductance value
+    lcomp_match     copmensation inductance matching, 0 means perfectly matched, 1 means positive side lcomps are 1% high and neg side lcomps are 1% low
     """
 
-    def __init__(self, number=1, port1="t1b", port2="t2a", node_port='y1', subcircuit=None ,lcomp=50e-9):
+    def __init__(self, number=1, port1="t1b", port2="t2a", node_port='y1', subcircuit=None ,lcomp=50e-9, lcomp_match=0):
         self.number = number
         self.name = "tee%d" % number
         self.port1 = port1
@@ -34,6 +36,7 @@ class T_connector(object):
         self.node_port = node_port
         self.rconn=0.010
         self.lcomp=lcomp
+        self.lcomp_match = lcomp_match
 
     def subcircuit(self):
         """Generate the subcircuit definition for this cable segment"""
@@ -42,10 +45,10 @@ class T_connector(object):
         netlist.append(".subckt %s ip in op on np nn rtn" % (self.name))
 
         #generate the body of the cable
-        netlist.append("l1p ip p %g rser=%g" % (self.lcomp, self.rconn))
-        netlist.append("l1n in n %g rser=%g" % (self.lcomp, self.rconn))
-        netlist.append("l2p p op %g rser=%g" % (self.lcomp, self.rconn))
-        netlist.append("l2n n on %g rser=%g" % (self.lcomp, self.rconn))
+        netlist.append("l1p ip p %g rser=%g" % (self.lcomp*(1+(self.lcomp_match/100.)), self.rconn))
+        netlist.append("l1n in n %g rser=%g" % (self.lcomp*(1-(self.lcomp_match/100.)), self.rconn))
+        netlist.append("l2p p op %g rser=%g" % (self.lcomp*(1+(self.lcomp_match/100.)), self.rconn))
+        netlist.append("l2n n on %g rser=%g" % (self.lcomp*(1-(self.lcomp_match/100.)), self.rconn))
 
         netlist.append("r3p p np %g" % self.rconn)
         netlist.append("r3n n nn %g" % self.rconn)
@@ -59,6 +62,8 @@ class T_connector(object):
             ,"* name        %s" % self.name
             ,"* port1       %s" % self.port1
             ,"* port2       %s" % self.port2
+            ,"* lcomp       %s" % self.lcomp
+            ,"* lcomp_match %s" % self.lcomp_match
             ,"* node_port   %s" % self.node_port
             ,"**********************"
             ]

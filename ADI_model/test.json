@@ -1,0 +1,11 @@
+{
+    "nodes" : 16,
+    "length" : 50,
+    "start_pad" : 0,
+    "end_pad" : 0,
+    "start_attach" : 1,
+    "end_attach" : 14,
+    "separation_min" : 0.2,
+    "drop_max" : 0.10,
+    "noautoscale" : false
+}

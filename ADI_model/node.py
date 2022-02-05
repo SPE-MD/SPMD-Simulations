@@ -26,11 +26,11 @@ class Node(object):
     port            the name of the port connection, for example "t1"
                     the connections at the port of this cable will then be called t1p and t1n
     drop_length     length of cable connecting the node to the mixing segment
-    drop_gage       cable gage connecting node to the mixing segment
+    drop_gauge       cable gauge connecting node to the mixing segment
     spice_model     name of the spice subcircuit to envoke when creating the model
     """
 
-    def __init__(self, number=0, port="t0", drop_length=0.0, drop_gage=18,
+    def __init__(self, number=0, port="t0", drop_length=0.0, drop_gauge=18,
             spice_model="node", random_drop=False,
             cnode=30e-12, lpodl=80e-6, rnode=10000):
         self.name = "node%d" % number
@@ -39,9 +39,10 @@ class Node(object):
         self.phy_port = "phy_%d_" % number
         self.drop_name = "drop%d" % self.number
         self.drop_length = drop_length
+        self.random_drop = random_drop
         if(random_drop):
             self.drop_length = random.uniform(0,drop_length)
-        self.drop_gage = drop_gage
+        self.drop_gauge = drop_gauge
         self.spice_model = spice_model
         self.cnode = cnode
         self.lpodl = lpodl
@@ -50,21 +51,25 @@ class Node(object):
     def subcircuit(self):
         """Generate the subcircuit definition for this node segment"""
         netlist = [self.__str__()]
-        drop = Cable(name=self.drop_name,length=self.drop_length,gage=18,max_seg_length=0.05,port1="t0",port2="t1")
+        drop = Cable(name=self.drop_name,length=self.drop_length,gauge=18,max_seg_length=0.05,port1="t0",port2="t1")
         netlist.append(drop.subcircuit())
         return "\n".join(netlist)
 
     def __str__(self):
         s = [
-             "**********************"
+             "********* NODE *********"
             ,"* number      %s" % self.number
             ,"* name        %s" % self.name
             ,"* port        %s" % self.port
             ,"* drop_name   %s" % self.drop_name
             ,"* drop_length %f" % self.drop_length
-            ,"* drop_gage   %d" % self.drop_gage
+            ,"* random_drop %s" % self.random_drop
+            ,"* drop_gauge  %d" % self.drop_gauge
             ,"* spice_model %s" % self.spice_model
-            ,"**********************"
+            ,"* cnode       %s" % self.cnode
+            ,"* lpodl       %s" % self.lpodl
+            ,"* rnode       %s" % self.rnode
+            ,"************************"
             ]
         return "\n".join(s)
 

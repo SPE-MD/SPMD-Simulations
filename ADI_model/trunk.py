@@ -93,11 +93,11 @@ class Segment(object):
         return offset
 
 class Trunk(object):
-    """Object representing a section of cable
+    """Object representing the setup of the mixing segment - node spacing and number of nodes
 
     name            name of the trunk segment.  This will be the name of the instance and the subcircuit
     length          length of the trunk segment
-    gage            cable gage, does nothing right now
+    gauge            cable gauge, does nothing right now
     max_seg_length  max length for a finite element segment, 0.05m is a good choice here
     separation_min  minimum separation between nodes attached to the trunk
     start_pad       minimum distance between the start of the cable and the 1st node
@@ -107,11 +107,11 @@ class Trunk(object):
     random_attach   if true, nodes not forced to beginning or end of the trunk will be spaced randomly
     """
 
-    def __init__(self, name="trunk" ,length=10, nodes=16, gage=18, max_seg_length=0.05, separation_min=1, random_seed=-1, start_pad=0, end_pad=0\
+    def __init__(self, name="trunk" ,length=10, nodes=16, gauge=18, max_seg_length=0.05, separation_min=1, random_seed=-1, start_pad=0, end_pad=0\
             , start_attach=0, end_attach=0, random_attach=True, attach_error=0, attach_points=None):
         self.name = name
         self.length = length
-        self.gage = gage
+        self.gauge = gauge
         self.max_seg_length = max_seg_length
         self.separation_min = separation_min
         self.start_pad = start_pad
@@ -124,7 +124,9 @@ class Trunk(object):
         attach_end = length-end_pad
         end = []
         start = []
-        if(attach_points == None):
+
+        #if the attach points aren't specified generate them with even spacing or random spacing, depending on passed parameters
+        if(attach_points == None): 
             if(end_attach <= unattached and end_attach > 0):
                 nend = end_attach
                 end = self.end_attach(attach_end, nend , separation_min)
@@ -201,34 +203,48 @@ class Trunk(object):
             attach_points.append(start_attach_point + (i * separation_min))
         return attach_points
 
-    def get_cable_segments(self):
+    #pass cable config as a list of dicts
+    #index of the list refers to a specific cable segment
+    #each index points to a dict with configurable parameters for that cable segment
+    #also pass dictionary of cable models
+    def get_cable_segments(self, segment_data, cable_models):
         trunk_segments=[]
+
         #is there space between the start termination and the 1st node?
         if(self.attach_points[0] > 0):
             #make segment 0
-            t=Cable(name="trunk0",length=self.attach_points[0],port1="t0a",port2="t0b")
+            cable_model = cable_models[segment_data[0]['model']]
+            spice_model = segment_data[0]['spice_model']
+            Zo = segment_data[0]['Zo']
+            t=Cable(cable_model,name="trunk0",length=self.attach_points[0],port1="t0a",port2="t0b",Zo=Zo,spice_model=spice_model)
             trunk_segments.append(t)
 
         print(len(self.attach_points))
         for l in range(1,len(self.attach_points)):
+            cable_model = cable_models[segment_data[l]['model']]
+            spice_model = segment_data[l]['spice_model']
+            Zo = segment_data[l]['Zo']
             length = self.attach_points[l] - self.attach_points[l-1]
             if length < self.separation_min:
-                print("violation of min separation on segment %d" % l)
+                print("violation of min separation (%g) on segment %d" % (self.separation_min,l))
                 print("%.5f - %.5f" % (self.attach_points[l], self.attach_points[l-1]))
-                exit(1)
+                #exit(1)
             port1="t%da" % l
             port2="t%db" % l
-            t=Cable(name="trunk%d" % l,length=length,port1=port1 ,port2=port2)
+            t=Cable(cable_model,name="trunk%d" % l,length=length,port1=port1 ,port2=port2, Zo=Zo,spice_model=spice_model)
             trunk_segments.append(t)
 
         #is there space between the end termination and the last node?
         if(self.attach_points[-1] < self.length):
+            cable_model = cable_models[segment_data[-1]['model']]
+            spice_model = segment_data[-1]['spice_model']
+            Zo = segment_data[-1]['Zo']
             #make segment nsegs+1
             name="trunk%d" % (l+1)
             length = (self.length - self.attach_points[-1])
             port1="t%da" % (l+1)
             port2="t%db" % (l+1)
-            t=Cable(name=name,length=length,port1=port1 ,port2=port2)
+            t=Cable(cable_model,name=name,length=length,port1=port1 ,port2=port2, Zo=Zo,spice_model=spice_model)
             trunk_segments.append(t)
         return trunk_segments
 
@@ -259,7 +275,7 @@ class Trunk(object):
              "**********************"
             ,"* name    %s" % self.name
             ,"* length  %s" % self.length
-            ,"* gage    %s" % self.gage
+            ,"* gauge   %s" % self.gauge
             ,"* seg_max %s" % self.max_seg_length
             ,"* nsegs   %f" % self.nsegs
             ,"* whole   %f" % self.whole

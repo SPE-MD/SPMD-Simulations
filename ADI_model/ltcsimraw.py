@@ -117,7 +117,7 @@ class ltcsimraw():
             line = line.rstrip()
             #print( "#" + line)
             ln = line.split(": ") 
-            #print( line)
+            print( line)
             #print( ln)
             self.preamble.update({ln[0]:ln[1]})
 
@@ -311,18 +311,20 @@ class ltcsimraw():
         frequency=[]
         s11=[]
         s11_phase=[]
+        dm_cm=[]
         s21=[]
         gain=[]
         phase=[]
         zin_mag=[]
         zin_phase=[]
         for x in data:
-            vend   = x[index[vport2[0]]]-x[index[vport2[1]]]
-            iend   = x[index[iport2]]
-            vin    = x[index[vport1[0]]]-x[index[vport1[1]]]
-            iin    = x[index[iport1]]
-            rin    = 50
-            rout   = 50
+            vend_cm = (x[index[vport2[0]]]+x[index[vport2[1]]])/2
+            vend    = x[index[vport2[0]]]-x[index[vport2[1]]]
+            iend    = x[index[iport2]]
+            vin     = x[index[vport1[0]]]-x[index[vport1[1]]]
+            iin     = x[index[iport1]]
+            rin     = 50
+            rout    = 50
             a1 = (vin + (iin*rin))
             b1 = (vin - (iin*rin))
             a2 = (vend + (iend*rout))
@@ -330,13 +332,15 @@ class ltcsimraw():
             s11_mp  = self.decodeComplex(a1 / b1)
             s21_mp  = self.decodeComplex(b2 / a1)
             gain_mp = self.decodeComplex(vend/vin)
+            dm_cm_mp = self.decodeComplex(vend_cm/vin)
             frequency.append(x[0])
             s11.append(s11_mp[0])
             s11_phase.append(s11_mp[1])
             s21.append(s21_mp[0])
             gain.append(gain_mp[0])
             phase.append(gain_mp[1])
-            zin_mag.append(self.decodeComplex(vin/iin)[0])
+            dm_cm.append(dm_cm_mp[0])
+            zin_mag.append(pow(10,self.decodeComplex(vin/iin)[0]/20))
             zin_phase.append(self.decodeComplex(vin/iin)[1])
 
         return {
@@ -348,6 +352,7 @@ class ltcsimraw():
             "phase" : phase,
             "zin_mag" : zin_mag,
             "zin_phase" : zin_phase,
+            "dm_cm" : dm_cm,
             }
 
     def fft_transfer(self, fft, vport1, vport2):
@@ -361,6 +366,21 @@ class ltcsimraw():
             vin    = data[i][index[vport1[0]]]-data[i][index[vport1[1]]]
             #gain_mp = self.decodeComplex(vend/vin)
             phasor_out = fft[i+1] * (vend/vin)
+            fft_out.append(phasor_out)
+            #frequency.append(data[i][0])
+
+        return fft_out
+
+    def fft_zin(self, fft, vport1, iport):
+        (data,labels) = self.getSignals([],[],[vport1[0],vport1[1],iport])
+        index = dict(zip(labels, range(0,len(labels))))
+        #print(labels)
+        #frequency=[]
+        fft_out = [0]
+        for i in range(0,len(data)):
+            zin    = data[i][index[vport1[0]]]-data[i][index[vport1[1]]] / data[i][index[iport]]
+            #gain_mp = self.decodeComplex(vend/vin)
+            phasor_out = fft[i+1] * zin
             fft_out.append(phasor_out)
             #frequency.append(data[i][0])
 

@@ -1,0 +1,77 @@
+{
+    "defaults_comment" : "This are the default configuration parameters.  These can be overridden by command line args or by fields in a test-specific json file",
+    "nodes" : 16,
+    "length" : 50,
+    "random_attach" : false,
+    "start_attach" : 0,
+    "end_attach" : 0,
+    "start_pad" : 0,
+    "end_pad" : 0,
+    "separation_min" : 1.0,
+    "segments_per_meter" : 20,
+    "drop_max" : 0.02,
+    "random_drop" : false,
+    "seed" : -1,
+    "tx_node" : 1,
+    "attach_error" : 0,
+    "attach_points" : null,
+    "noautoscale" : true,
+    "noplot" : false,
+    "plot_png_filename" : "zcable.png",
+    "eye_adjust" : [ 0, 0 ],
+    "default_termination" : {
+            "comment" : "cmatch declares how well the terminations match (in pct), 0 means perfet match. -1 means ccn is 1% high, ccp i 1% low",
+            "rterm" : 100,
+            "rtol" : 0,
+            "ccouple" : 220e-9,
+            "cmatch" : 0.00
+    },
+    "default_node" : 
+        {  
+            "drop_length" : 0.01,
+            "random_drop" : false,
+            "cnode" : 30e-12,
+            "lcomp" : 50e-15,
+            "lpodl" : 80e-6,
+            "rnode" : 10e3,
+            "lcomp_match" : 1,
+            "spice_model" : "node",
+            "drop_model" : null
+        },
+    "default_segment" :
+        {
+            "model"       : "panduit_18g",
+            "gauge"       : 18,
+            "Zo"          : null,
+            "spice_model" : "tlump"
+        },
+    "cable_models" :
+    {
+        "panduit_18g" : 
+        {
+            "name"       : "panduit_18g",
+            "comment"    : "#18 gauge cable. Original data was for a 5cm segment.  Divide by ref_length to get 1m referenced values.", 
+            "gauge"      : 18,
+            "ref_length" : 0.05,
+            "rskin"     : 1.134268e-5,
+            "l"          : 20.6435e-9 ,
+            "c"          : 2.25026e-12,
+            "rdc"        : 0.0094
+        },
+        "random_junk" : 
+        {
+            "comment"    : "This is a random set of number used to test the model's parser", 
+            "gauge"      : 18,
+            "ref_length" : 0.05,
+            "rskin"      : 2e-5,
+            "l"          : 20e-9 ,
+            "c"          : 2e-12,
+            "rdc"        : 0.01
+        }
+    },
+    "node_descriptions" : [],
+    "trunk_description" : {
+        "segments" : []
+    }
+
+}

@@ -38,9 +38,11 @@ class Line2D(object):
 
     #returns true if x is between x1 and x2
     def x_in_range(self,x):
-        if x >= self.x1 and x <= self.x2:
-            return True
-        return False
+        if x < self.x1:
+            return -1
+        if x > self.x2:
+            return 1
+        return 0
 
 
 #pass a group of points that describe a pwl shape
@@ -48,6 +50,7 @@ class Line2D(object):
 #pass a pwlFile that is space delimited, 2 columns of x y points
 class pwlWave(object):
     def __init__(self,pwlFile=None):
+        self.line_pointer = None
         if(self.readPWLFile(pwlFile)):
             self.buildPwlFromText()
             pass
@@ -86,6 +89,8 @@ class pwlWave(object):
         for i in range(len(self.pwl)-1):
             self.lines.append(Line2D(self.pwl[i],self.pwl[i+1]))
 
+        self.line_index = 0
+
         return True
             
     def pwlTimes(self,time):
@@ -106,12 +111,88 @@ class pwlWave(object):
             if time > self.pwl[-1][0]:
                 return self.pwl[-1][1]
 
-        for l in self.lines:
-            if l.x_in_range(time):
-                return l.getY(time)
+        while(self.line_index >= 0 and self.line_index < len(self.lines)):
+            i = self.lines[self.line_index].x_in_range(time)
+            if i == 0:
+                return self.lines[self.line_index].getY(time)
+            self.line_index += i
 
         print("Should not have gotten here!!!!")
         return p[-1][1]
+
+#set up a pulse train that can be used to measure pulse response
+#need a repeating (prime number) set of pulses that are coherantly sampled
+#across the sample period
+#ts * ns / Prime = Tpulse
+#Tpulse should be long so that reflections die out before the next transition
+#Tpulse should also be short so that the coherant sample gets as many amplitudes 
+#and phases as possible
+class pulse_wave(object):
+    def __init__(self,ts=1/81.92e6,ns=8192, prime=13, duty_cycle=0.5, trise=10e-9):
+        self.ts = ts #1/81.92e6
+        self.ns = ns #8192
+        self.tstop=ts*ns 
+        self.tper = ts * ns / prime
+        self.trise=10e-9
+        self.thigh = duty_cycle * (self.tper - 2 * self.trise)
+        self.tlow  = (1-duty_cycle) * (self.tper - 2 * self.trise)
+
+        self.pwl_wave = pwlWave()
+        tstart = 0
+        t0 = tstart
+        self.amp=1
+
+        if(False): #short pulse
+            self.pwl =     ["%.12f %.2f" % (t0,               0)]
+            self.pwl.append("%.12f %.2f" % (t0+1e-12,  self.amp))
+            self.pwl.append("%.12f %.2f" % (t0+self.ts,  self.amp))
+            self.pwl.append("%.12f %.2f" % (t0+self.ts+1e-12,  0))
+            self.pwl.append("%.12f %.2f" % (self.tper, 0))
+
+        if(True):
+            self.pwl =     ["%.12f %.2f" % (t0,               1*self.amp)]
+            self.pwl.append("%.12f %.2f" % (self.thigh,       1*self.amp))
+            self.pwl.append("%.12f %.2f" % (self.thigh+trise, 0))
+            self.pwl.append("%.12f %.2f" % (self.tper-trise , 0))
+            self.pwl.append("%.12f %.2f" % (self.tper,        1*self.amp))
+            self.pwl_wave.buildPwlFromText(self.pwl)
+
+        self._sample_()
+        self._fft_()
+
+    def _sample_(self):
+        self.sampled_times  = []
+        self.sampled_values = []
+        for i in range(0,self.ns):
+            tx = i * self.ts
+            self.sampled_times.append(tx)
+            self.sampled_values.append(self.pwl_wave.pwlTimes(tx))
+            #dme.write("%.12f %.12f\n" % (tx, values[-1]))
+            ##use this to make an eye diagram
+            #t0=self.per/2
+            #loop=per
+            #if(False):
+            #    if(tx - t0 > loop):
+            #        t0+=loop
+            #        print("")
+            #    print("%.12f %.12f" % (tx-t0, wave.pwlTimes(tx)))
+        #print("#last timepoint = %.12f, %.2f" % (tx, values[-1]))
+
+    def _fft_(self):
+        values = np.array(self.sampled_values, dtype=float)
+        self.fft_value = np.fft.rfft(values)
+        self.fft_freq  = np.fft.rfftfreq(n=values.size, d=self.ts)
+        #mag = np.abs(fft_value)**2
+        #reconstruct = np.fft.irfft(fft_value)
+
+        #for i in range(0,len(reconstruct)):
+            #print("%.12f %.12f" % (ts*i, reconstruct[i]))
+
+        #with open("dme_wave.fft", 'w') as fft:
+        #    for i in range(0,len(fft_freq)):
+        #        fft.write("{:.12f} {:.12g}\n".format(fft_freq[i], fft_value[i]))
+
+
 
 class dme_wave(object):
     def __init__(self,ts=1/81.92e6,ns=8192,n_symbols=1250):

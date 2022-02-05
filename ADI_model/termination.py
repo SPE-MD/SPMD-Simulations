@@ -27,9 +27,11 @@ class Termination(object):
                     the connections at the port of this cable will then be called t1p and t1n
                     this connects directly to a termination resistor.  This is
                     where a tx or rx would connect
+    ccouple         value of dc-blocking capacitors
+    cmatch          specify mismatch of dc-blocking caps in percent.  Positive cmatch makes the pos
     """
 
-    def __init__(self, name="term0", port="t0", stim_port="ts", rterm=100, ccouple=220e-9):
+    def __init__(self, name="term0", port="t0", stim_port="ts", rterm=100, ccouple=220e-9, cmatch=0):
         self.name = name
         self.port = port
         self.port1 = port
@@ -37,6 +39,9 @@ class Termination(object):
         self.stim_port = stim_port
         self.rterm = rterm
         self.ccouple = ccouple
+        self.cmatch = cmatch
+        self.ccp = self.ccouple * (1 + (self.cmatch/100.))
+        self.ccn = self.ccouple * (1 - (self.cmatch/100.))
 
     def subcircuit(self):
         """Generate the subcircuit definition for this cable segment"""
@@ -45,10 +50,10 @@ class Termination(object):
         netlist.append(".subckt %s p n sp sn rtn" % (self.name))
 
         #generate the body of the cable
-        netlist.append("ccp p sp %g" % self.ccouple)
-        netlist.append("ccn sn n %g" % self.ccouple)
-        netlist.append("rp sp rtn %g" % (self.rterm /2))
-        netlist.append("rn rtn sn %g" % (self.rterm /2))
+        netlist.append("rcp p sp %g" % self.ccp)
+        netlist.append("rcn sn n %g" % self.ccn)
+        netlist.append("rp sp rtn %g" % (self.rterm / 2.))
+        netlist.append("rn rtn sn %g" % (self.rterm / 2.))
 
         netlist.append(".ends %s" % self.name)
         return "\n".join(netlist)
@@ -59,6 +64,9 @@ class Termination(object):
             ,"* name    %s" % self.name
             ,"* rterm   %s" % self.rterm
             ,"* ccouple %s" % self.ccouple
+            ,"* cmatch  %s" % self.cmatch
+            ,"* ccp     %s" % self.ccp
+            ,"* ccn     %s" % self.ccn
             ,"* port    %s" % self.port
             ,"**********************"
             ]
