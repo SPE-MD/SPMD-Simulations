@@ -31,7 +31,7 @@
             "drop_length" : 0.01,
             "random_drop" : false,
             "cnode" : 30e-12,
-            "lcomp" : 50e-15,
+            "lcomp" : 50e-9,
             "lpodl" : 80e-6,
             "rnode" : 10e3,
             "lcomp_match" : 1,
