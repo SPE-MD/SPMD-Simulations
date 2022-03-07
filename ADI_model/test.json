@@ -1,11 +1,16 @@
 {
-    "nodes" : 16,
-    "length" : 50,
+    "nodes" : 2,
+    "length" : 100,
     "start_pad" : 0,
     "end_pad" : 0,
-    "start_attach" : 1,
-    "end_attach" : 14,
+    "start_attach" : 0,
+    "end_attach" : 0,
     "separation_min" : 0.2,
     "drop_max" : 0.10,
-    "noautoscale" : false
+    "noautoscale" : false,
+    "analysis" : "tran",
+    "includes" : [
+        ".include tlump_dc.p",
+        ".include node.p"
+    ]
 }

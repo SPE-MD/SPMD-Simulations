@@ -216,7 +216,7 @@ class Trunk(object):
             cable_model = cable_models[segment_data[0]['model']]
             spice_model = segment_data[0]['spice_model']
             Zo = segment_data[0]['Zo']
-            t=Cable(cable_model,name="trunk0",length=self.attach_points[0],port1="t0a",port2="t0b",Zo=Zo,spice_model=spice_model)
+            t=Cable(cable_model,name="trunk0",length=self.attach_points[0],port1="t0a",port2="t0b",Zo=Zo,spice_model=spice_model,max_seg_length=self.max_seg_length)
             trunk_segments.append(t)
 
         print(len(self.attach_points))
@@ -231,7 +231,7 @@ class Trunk(object):
                 #exit(1)
             port1="t%da" % l
             port2="t%db" % l
-            t=Cable(cable_model,name="trunk%d" % l,length=length,port1=port1 ,port2=port2, Zo=Zo,spice_model=spice_model)
+            t=Cable(cable_model,name="trunk%d" % l,length=length,port1=port1 ,port2=port2, Zo=Zo,spice_model=spice_model,max_seg_length=self.max_seg_length)
             trunk_segments.append(t)
 
         #is there space between the end termination and the last node?
@@ -244,31 +244,9 @@ class Trunk(object):
             length = (self.length - self.attach_points[-1])
             port1="t%da" % (l+1)
             port2="t%db" % (l+1)
-            t=Cable(cable_model,name=name,length=length,port1=port1 ,port2=port2, Zo=Zo,spice_model=spice_model)
+            t=Cable(cable_model,name=name,length=length,port1=port1 ,port2=port2, Zo=Zo,spice_model=spice_model,max_seg_length=self.max_seg_length)
             trunk_segments.append(t)
         return trunk_segments
-
-    def subcircuit(self):
-        """Generate the subcircuit definition for this cable segment"""
-        netlist = [self.__str__()]
-
-        netlist.append(".subckt %s %04dp %04dn endp endn rtn" % 
-                    (self.name, 0, 0))
-
-        netlist.append("rendp endp %04dp 1u" % self.total_segs)
-        netlist.append("rendn %04dn endn 1u" % self.total_segs)
-
-        #generate the body of the cable
-        for i in range(0,self.whole):
-            netlist.append(self.__make_segment__(i, self.max_seg_length))
-
-        #handle fractional segments
-        if(self.part > 0):
-            netlist.append(self.__make_segment__(self.whole, self.part*self.max_seg_length))
-
-
-        netlist.append(".ends %s" % self.name)
-        return "\n".join(netlist)
 
     def __str__(self):
         s = [

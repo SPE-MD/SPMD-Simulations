@@ -50,8 +50,8 @@ class Termination(object):
         netlist.append(".subckt %s p n sp sn rtn" % (self.name))
 
         #generate the body of the cable
-        netlist.append("rcp p sp %g" % self.ccp)
-        netlist.append("rcn sn n %g" % self.ccn)
+        netlist.append("ccp p sp %g" % self.ccp)
+        netlist.append("ccn sn n %g" % self.ccn)
         netlist.append("rp sp rtn %g" % (self.rterm / 2.))
         netlist.append("rn rtn sn %g" % (self.rterm / 2.))
 

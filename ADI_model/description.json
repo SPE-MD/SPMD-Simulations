@@ -1,0 +1,79 @@
+{
+    "defaults_comment" : "These are descriptions of the default parameters in the defaults.json file.  This file is for information only and does not feed data to the model",
+    "includes" : ["a list of spice file that need to be included for the sim"],
+    "analysis" : "spice analysis type.  ac is the only option right now",
+    "nodes" : "specify the number of nodes.  This parameter needs to be >=2",
+    "length" : "length of the mixing segment",
+    "random_attach" : "if this is set to True, then the nodes will be attached to the mixing segment at random places. This will be overriden if \"attach_points\" is specified",
+    "start_attach"  : "Specify a number of nodes to be placed at the beginning of the mixing segment with 'serparation_min' spacing. This will be overriden if \"attach_points\" is specified",
+    "end_attach"    : "Specify a number of nodes to be placed at the end of the mixing segment with 'serparation_min' spacing. This will be overriden if \"attach_points\" is specified",
+    "start_pad"     : "Specify the distance between the start termination of the mixing segment and the first node. This will be overriden if \"attach_points\" is specified",
+    "end_pad"       : "Specify the distance between the end termination of the mixing segment and the last node. This will be overriden if \"attach_points\" is specified",
+    "separation_min" : "Minimum Separation distance between nodes",
+    "segments_per_meter" : "Number of lump model segments per meter for transmission line modeling",
+    "drop_max" : "Maximum Drop length between mixing segment and a node's interface",
+    "random_drop" : "If set to true, nodes will be assigned a random drop length limited by the parameter 'drop_max'",
+    "seed" : "Specify a seed number for the random number generator.  Set to -1 for a random seed",
+    "tx_node" : "Specify the node number to treat as the transmitting node",
+    "attach_error" : "add gaussian error to attachment points.  Pass the the sigma value of the attachment error or 0 for no error.  Ignored for randomly placed nodes.  If 'attach_error' is set to a large value, can separation_min be violated? I don't know",
+    "attach_points" : "if a list of values is specified, other 
+    "noautoscale" : true,
+    "noplot" : false,
+    "plot_png_filename" : "zcable.png",
+    "eye_adjust" : [ 0, 0 ],
+    "default_termination" : {
+        "comment" : "cmatch declares how well the terminations match (in pct), 0 means perfet match. -1 means ccn is 1% high, ccp i 1% low",
+        "rterm" : 100,
+        "rtol" : 0,
+        "ccouple" : 220e-9,
+        "cmatch" : 0.00
+    },
+    "default_node" : 
+    {  
+        "drop_length" : 0.01,
+        "random_drop" : false,
+        "cnode" : 30e-12,
+        "lcomp" : 50e-9,
+        "lpodl" : 80e-6,
+        "rnode" : 10e3,
+        "lcomp_match" : 1,
+        "spice_model" : "node",
+        "drop_model" : null
+    },
+    "default_segment" :
+    {
+        "model"       : "panduit_18g",
+        "gauge"       : 18,
+        "Zo"          : null,
+        "spice_model" : "tlump"
+    },
+    "cable_models" :
+    {
+        "panduit_18g" : 
+        {
+            "name"       : "panduit_18g",
+            "comment"    : "#18 gauge cable. Original data was for a 5cm segment.  Divide by ref_length to get 1m referenced values.", 
+            "gauge"      : 18,
+            "ref_length" : 0.05,
+            "rskin"     : 1.134268e-5,
+            "l"          : 20.6435e-9 ,
+            "c"          : 2.25026e-12,
+            "rdc"        : 0.0094
+        },
+        "random_junk" : 
+        {
+            "comment"    : "This is a random set of number used to test the model's parser", 
+            "gauge"      : 18,
+            "ref_length" : 0.05,
+            "rskin"      : 2e-5,
+            "l"          : 20e-9 ,
+            "c"          : 2e-12,
+            "rdc"        : 0.01
+        }
+    },
+    "node_descriptions" : [],
+    "trunk_description" : {
+        "segments" : []
+    }
+
+}

@@ -1,5 +1,10 @@
 {
     "defaults_comment" : "This are the default configuration parameters.  These can be overridden by command line args or by fields in a test-specific json file",
+    "includes" : [
+        ".include tlump2.p",
+        ".include node.p"
+    ],
+    "analysis" : "ac",
     "nodes" : 16,
     "length" : 50,
     "random_attach" : false,
@@ -20,31 +25,31 @@
     "plot_png_filename" : "zcable.png",
     "eye_adjust" : [ 0, 0 ],
     "default_termination" : {
-            "comment" : "cmatch declares how well the terminations match (in pct), 0 means perfet match. -1 means ccn is 1% high, ccp i 1% low",
-            "rterm" : 100,
-            "rtol" : 0,
-            "ccouple" : 220e-9,
-            "cmatch" : 0.00
+        "comment" : "cmatch declares how well the terminations match (in pct), 0 means perfet match. -1 means ccn is 1% high, ccp i 1% low",
+        "rterm" : 100,
+        "rtol" : 0,
+        "ccouple" : 220e-9,
+        "cmatch" : 0.00
     },
     "default_node" : 
-        {  
-            "drop_length" : 0.01,
-            "random_drop" : false,
-            "cnode" : 30e-12,
-            "lcomp" : 50e-9,
-            "lpodl" : 80e-6,
-            "rnode" : 10e3,
-            "lcomp_match" : 1,
-            "spice_model" : "node",
-            "drop_model" : null
-        },
+    {  
+        "drop_length" : 0.01,
+        "random_drop" : false,
+        "cnode" : 30e-12,
+        "lcomp" : 50e-9,
+        "lpodl" : 80e-6,
+        "rnode" : 10e3,
+        "lcomp_match" : 1,
+        "spice_model" : "node",
+        "drop_model" : null
+    },
     "default_segment" :
-        {
-            "model"       : "panduit_18g",
-            "gauge"       : 18,
-            "Zo"          : null,
-            "spice_model" : "tlump"
-        },
+    {
+        "model"       : "panduit_18g",
+        "gauge"       : 18,
+        "Zo"          : null,
+        "spice_model" : "tlump"
+    },
     "cable_models" :
     {
         "panduit_18g" : 

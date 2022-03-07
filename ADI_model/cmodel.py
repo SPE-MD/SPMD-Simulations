@@ -437,6 +437,7 @@ if __name__ == '__main__':
             , random_attach=config['random_attach']
             , attach_error=config['attach_error']
             , attach_points=config['attach_points']
+            , max_seg_length=(1/config['segments_per_meter'])
             )
 
     #feed back precise attach points into json data structure
@@ -571,7 +572,7 @@ if __name__ == '__main__':
     #attach the termination to the last piece of the mixing segment
     ccouple =  config['termination']['end']['ccouple']
     rterm   =  config['termination']['end']['rterm']
-    term_end   = Termination(name="end_term", port=mixing_segment[-1].port2, stim_port="end", ccouple=ccouple, rterm=rterm)
+    term_end   = Termination(name="end_term", port=mixing_segment[-1].port2, stim_port="end_stim", ccouple=ccouple, rterm=rterm)
     mixing_segment.append(term_end)
 
     for m in mixing_segment:
@@ -593,6 +594,7 @@ if __name__ == '__main__':
                 , cnode       = config['node_descriptions'][n]['cnode']
                 , lpodl       = config['node_descriptions'][n]['lpodl']
                 , rnode       = config['node_descriptions'][n]['rnode']
+                , spice_model = config['node_descriptions'][n]['spice_model']
                 )
         nodes.append(node)
         print(node)
@@ -609,7 +611,14 @@ if __name__ == '__main__':
     tx_index=max(tx_index, 1)
     tx_node = nodes[tx_index-1]
     transmitter = Transmitter(port=tx_node.phy_port)
-        
+
+
+    ################################################################################
+    #Save all settings complied from defaults, test specific json and command line args as "last_run.json"
+    ################################################################################
+    with open("last_run.json", 'w') as f:
+        json.dump(config, f, indent=2)
+       
     ################################################################################
     #Write a spice file with the system setup
     ################################################################################
@@ -617,8 +626,7 @@ if __name__ == '__main__':
         cable.write("*lumped transmission line model with %d segments per meter at %d meters\n"\
         % (config['segments_per_meter'], config['length']))
         cable.write("*and a %f meter long cable\n" % config['length'])
-        cable.write(".include tlump2.p\n")
-        cable.write(".include node.p\n")
+
 
         for m in mixing_segment:
             cable.write(m.subcircuit()+"\n")
@@ -637,8 +645,21 @@ if __name__ == '__main__':
     # transient simulations.  Then another transient stimulus file will be
     # created at some point
     ################################################################################
-    with open("zcable.ac.cir", 'w') as zcable:
+
+    if(config['analysis'] != 'ac'):
+        exit(0)
+
+    cirfile = "zcable.%s.cir" % config['analysis']
+    rawfile = "zcable.%s.raw" % config['analysis']
+    with open(cirfile, 'w') as zcable:
         zcable.write("*ac sim command for cable impedance measurement\n")
+        if(not config['includes']):
+            zcable.write(".include tlump2.p\n")
+            zcable.write(".include node.p\n")
+        else:
+            for i in config['includes']:
+                zcable.write("%s\n" % i)
+
         zcable.write(".include cable.p\n")
 
         #differential signal input
@@ -656,8 +677,6 @@ if __name__ == '__main__':
             zcable.write("+ %s\n" % n.termination_current())
 
 
-    cirfile = "zcable.ac.cir"
-    rawfile = "zcable.ac.raw"
 
     ################################################################################
     #Set up and run a simulation, but don't run it twice if it has already been
@@ -678,9 +697,6 @@ if __name__ == '__main__':
     jsonSave = os.path.join("data",design_md5,design_md5+".json")
     outputdb = os.path.join("data",design_md5)
 
-    #save all settings complied from defaults, test specific json and command line args as "last_run.json"
-    with open("last_run.json", 'w') as f:
-        json.dump(config, f, indent=2)
 
     #print( design_md5)
     if not os.path.exists("data"):
@@ -725,7 +741,7 @@ if __name__ == '__main__':
     #Set up containers to plot the output
     ################################################################################
     #containers to hold output data for plotting
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4,1, figsize=(9, 9))  # Create a figure and an axes.
+    fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5,1, figsize=(9, 10))  # Create a figure and an axes.
 
     fig2, eye_plots = plt.subplots(1,2, figsize=(15, 9))  # Create a figure and an axes.
     #eps = (eye_plots[0][0], eye_plots[0][1], eye_plots[1][0], eye_plots[1][1])
@@ -827,24 +843,25 @@ if __name__ == '__main__':
     ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
     ax2.set_xlim([0,40.96e6])
     ax3.set_xlim([0,40.96e6])
+    ax4.set_xlim([0,40.96e6])
     if(config['noautoscale']):
         ax2.set_ylim([-20,10])
     ax1.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
 
     if(config['noautoscale']):
         pass
-        #ax4.set_xlim([-1,101])
-    ax4.set_ylim([-1,1])
-    ax4.set_xlabel('Attach (m)')  # Add a x-label to the axes.
-    ax4.set_ylabel('Drop (m)')  # Add a x-label to the axes.
+        #ax5.set_xlim([-1,101])
+    ax5.set_ylim([-1,1])
+    ax5.set_xlabel('Attach (m)')  # Add a x-label to the axes.
+    ax5.set_ylabel('Drop (m)')  # Add a x-label to the axes.
 
     #mixing segment line
-    ax4.plot([0,config['length']],[0,0], color="k")
+    ax5.plot([0,config['length']],[0,0], color="k")
     color_index = 0
     for node in trunk.attach_points:
-        ax4.plot([node], np.zeros_like([node]), "-o", color=color_array[color_index-1])
+        ax5.plot([node], np.zeros_like([node]), "-o", color=color_array[color_index-1])
         color_index += 1
-    ax4.plot(trunk.attach_points[tx_index-1], np.zeros_like(trunk.attach_points[tx_index-1]),
+    ax5.plot(trunk.attach_points[tx_index-1], np.zeros_like(trunk.attach_points[tx_index-1]),
             "-*",
             color="k",
             markerfacecolor="k",
@@ -862,9 +879,10 @@ if __name__ == '__main__':
             plot_drop.append(node.drop_length)
 
     #add the drop lengths to the plot
-    ax4.vlines(trunk.attach_points, 0, plot_drop, color="tab:red")
+    ax5.vlines(trunk.attach_points, 0, plot_drop, color="tab:red")
 
     ax3.set_ylabel('CM / TX_DM')  # Add an y-label to the axes.
+    ax4.set_ylabel('DME Input Spectrum')  # Add an y-label to the axes.
     #ax3.set_xlabel('Time')  # Add a y-label to the axes.
 
     ################################################################################
@@ -876,6 +894,14 @@ if __name__ == '__main__':
     for i in range(0,5):
         #TODO: Make dme signal generation dependent on .ac analysis points
         dme_signals.append(dme_wave())
+
+
+    #plot the power spectrum (magnitude) of the input DME signal
+    ax4.plot(dme_signals[0].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
+    #ax4.plot(dme_signals[1].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
+    #ax4.plot(dme_signals[2].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
+    #ax4.plot(dme_signals[3].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
+    #ax4.plot(dme_signals[4].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
 
 
     print("#Generating Eye Diagrams")
@@ -905,6 +931,7 @@ if __name__ == '__main__':
 
                     signal = np.fft.irfft(fft_out)
                     t=0
+                    #ax4.plot(dme_signals[0].fft_freq, 20*np.log10(np.absolute(fft_out)))
                     for i in range(0,len(signal)):
                         tn = i/81.92e6
                         if (tn - t) > lap:
