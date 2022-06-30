@@ -15,12 +15,14 @@ import argparse
 import time
 import random
 import numpy as np
+from scipy.signal import butter, lfilter, freqz
 import math
 import matplotlib.pyplot as plt
 import datetime
 import colorsys
 import json
 #from multiprocessing import Process
+
 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
 #import subprocess
@@ -40,7 +42,10 @@ from trunk import Trunk as Trunk
 from t_connector import T_connector as T_connector
 from dme import dme_wave as dme_wave
 from dme import pulse_wave as pulse_wave
+from dme import eye_diagram 
 
+def butter_lowpass(cutoff, fs, order=1):
+    return butter(order, cutoff, fs=fs, btype='lowpass', analog=False)
 
 def frequency_dom_to_time_dom(data):
     return micro_reflections(data, T=0.10, N=256)
@@ -342,6 +347,7 @@ if __name__ == '__main__':
         random.seed(seed)
     else:
         random.seed(seed)
+    np.random.seed(seed)
     print("#Random Seed = %s" % seed)
     ################################################################################
 
@@ -669,7 +675,13 @@ if __name__ == '__main__':
         zcable.write("vrtn rtn 0 0\n")
 
         #simulation command
-        zcable.write(".ac lin 4096 10k 40.96meg\n")
+        Ns = 8192
+        per = 80e-9
+        prime = 1253
+        Fs = Ns / (prime * per)
+        #print(Fs)
+        #print(".ac lin 4096 %.6g %.6g\n" % ((Fs/2.)/4096,Fs/2.))
+        zcable.write(".ac lin 4096 %.6g %.6g\n" % ((Fs/2.)/4096,Fs/2.))
 
         #select nodes to save to speed up the sim and reduce file size
         zcable.write(".save v(*) i(*)\n")
@@ -741,11 +753,11 @@ if __name__ == '__main__':
     #Set up containers to plot the output
     ################################################################################
     #containers to hold output data for plotting
-    fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5,1, figsize=(9, 10))  # Create a figure and an axes.
+    fig, (rl_plot, il_plot, cm_plot, pspec_plot, network_plot) = plt.subplots(5,1, figsize=(9, 10))  # Create a figure and an axes.
 
-    fig2, eye_plots = plt.subplots(1,2, figsize=(15, 9))  # Create a figure and an axes.
-    #eps = (eye_plots[0][0], eye_plots[0][1], eye_plots[1][0], eye_plots[1][1])
-    eps = (eye_plots[0], eye_plots[1])
+    fig2, eye_plots = plt.subplots(2,4, figsize=(20, 10))  # Create a figure and an axes.
+    eps = (eye_plots[0][0], eye_plots[0][1], eye_plots[0][2], eye_plots[0][3], eye_plots[1][0], eye_plots[1][1], eye_plots[1][2], eye_plots[1][3])
+    #eps = (eye_plots[0], eye_plots[1], eye_plots[2], eye_plots[3])
 
     #set the simulation command as the window title.
     fig.canvas.manager.set_window_title(" ".join(sys.argv))
@@ -814,54 +826,53 @@ if __name__ == '__main__':
 
     #Hue steps from 0 to 0.75 equate to 0 to 270 degrees Hue, or roughly red to violet
     #We don't go all the way to 1.0 because that would wrap back around to red
-
     for color_step in np.linspace(0, 0.75, num=len(nodes)):
         (red,green,blue) = colorsys.hsv_to_rgb(color_step,1,1)
         color_array.append('#%02X%02X%02X' % (int(red*255), int(green*255), int(blue*255)))  
 
     rl_limit = return_loss_limit(frequency[0])
     il_limit = insertion_loss_limit(frequency[0])
-    ax1.plot(frequency[0], rl_limit, label="clause 147 limit")  # Plot more data on the axes...
-    ax2.plot(frequency[0], il_limit, label="clause 147 limit")  # Plot more data on the axes...
-    ax1.plot(frequency[0], s11_plot[0], label="test", color='k')  # Plot more data on the axes...
+    rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit")  # Plot more data on the axes...
+    il_plot.plot(frequency[0], il_limit, label="clause 147 limit")  # Plot more data on the axes...
+    rl_plot.plot(frequency[0], s11_plot[0], label="test", color='k')  # Plot more data on the axes...
     timeDomainData = []
     for i,p in enumerate(frequency):
-        ax2.plot(frequency[i], s21_plot[i], label="test", color=color_array[i])  # Plot more data on the axes...
-        ax3.plot(frequency[i], dm_cm_plot[i], label="test", color=color_array[i])  # Plot more data on the axes...
-        #ax1.plot(frequency[i], s11_plot[i])  # Plot more data on the axes...
-        #ax2.plot(frequency[i], s21_plot[i])  # Plot more data on the axes...
+        il_plot.plot(frequency[i], s21_plot[i], label="test", color=color_array[i])  # Plot more data on the axes...
+        cm_plot.plot(frequency[i], dm_cm_plot[i], label="test", color=color_array[i])  # Plot more data on the axes...
+        #rl_plot.plot(frequency[i], s11_plot[i])  # Plot more data on the axes...
+        #il_plot.plot(frequency[i], s21_plot[i])  # Plot more data on the axes...
         #timeDomainDataRaw = frequency_dom_to_time_dom(s21_plot[i])
         #timeDomainData.append(timeDomainDataRaw[0:int(len(timeDomainDataRaw)/2)])
-        #ax3.plot(range(len(timeDomainData[i])), timeDomainData[i], label="time", color=color_array[i])  # Plot more data on the axes...
+        #cm_plot.plot(range(len(timeDomainData[i])), timeDomainData[i], label="time", color=color_array[i])  # Plot more data on the axes...
 
-    ax1.set_ylabel('RL (dB)')  # Add an x-label to the axes.
-    ax1.set_xlim([0,40e6])
+    rl_plot.set_ylabel('RL (dB)')  # Add an x-label to the axes.
+    rl_plot.set_xlim([0,40e6])
     if(config['noautoscale']):
-        ax1.set_ylim([-70,10])
+        rl_plot.set_ylim([-70,10])
 
-    ax2.set_ylabel('Rx/Tx (dB)')  # Add an x-label to the axes.
-    ax2.set_xlabel('Frequency')  # Add a y-label to the axes.
-    ax2.set_xlim([0,40.96e6])
-    ax3.set_xlim([0,40.96e6])
-    ax4.set_xlim([0,40.96e6])
+    il_plot.set_ylabel('Rx/Tx (dB)')  # Add an x-label to the axes.
+    il_plot.set_xlabel('Frequency')  # Add a y-label to the axes.
+    il_plot.set_xlim([0,40.96e6])
+    cm_plot.set_xlim([0,40.96e6])
+    pspec_plot.set_xlim([0,40.96e6])
     if(config['noautoscale']):
-        ax2.set_ylim([-20,10])
-    ax1.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
+        il_plot.set_ylim([-20,10])
+    rl_plot.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
 
     if(config['noautoscale']):
         pass
-        #ax5.set_xlim([-1,101])
-    ax5.set_ylim([-1,1])
-    ax5.set_xlabel('Attach (m)')  # Add a x-label to the axes.
-    ax5.set_ylabel('Drop (m)')  # Add a x-label to the axes.
+        #network_plot.set_xlim([-1,101])
+    network_plot.set_ylim([-1,1])
+    network_plot.set_xlabel('Attach (m)')  # Add a x-label to the axes.
+    network_plot.set_ylabel('Drop (m)')  # Add a x-label to the axes.
 
     #mixing segment line
-    ax5.plot([0,config['length']],[0,0], color="k")
+    network_plot.plot([0,config['length']],[0,0], color="k")
     color_index = 0
     for node in trunk.attach_points:
-        ax5.plot([node], np.zeros_like([node]), "-o", color=color_array[color_index-1])
+        network_plot.plot([node], np.zeros_like([node]), "-o", color=color_array[color_index-1])
         color_index += 1
-    ax5.plot(trunk.attach_points[tx_index-1], np.zeros_like(trunk.attach_points[tx_index-1]),
+    network_plot.plot(trunk.attach_points[tx_index-1], np.zeros_like(trunk.attach_points[tx_index-1]),
             "-*",
             color="k",
             markerfacecolor="k",
@@ -879,11 +890,11 @@ if __name__ == '__main__':
             plot_drop.append(node.drop_length)
 
     #add the drop lengths to the plot
-    ax5.vlines(trunk.attach_points, 0, plot_drop, color="tab:red")
+    network_plot.vlines(trunk.attach_points, 0, plot_drop, color="tab:red")
 
-    ax3.set_ylabel('CM / TX_DM')  # Add an y-label to the axes.
-    ax4.set_ylabel('DME Input Spectrum')  # Add an y-label to the axes.
-    #ax3.set_xlabel('Time')  # Add a y-label to the axes.
+    cm_plot.set_ylabel('CM / TX_DM')  # Add an y-label to the axes.
+    pspec_plot.set_ylabel('DME Input Spectrum')  # Add an y-label to the axes.
+    #cm_plot.set_xlabel('Time')  # Add a y-label to the axes.
 
     ################################################################################
     # Eye Diagram Generation
@@ -891,87 +902,71 @@ if __name__ == '__main__':
     print("#Generating Random DME Signals")
     dme_signals = []
     #get 5 random data sequences to make the eye diagrams nice and thick
-    for i in range(0,5):
+    for i in range(0,10):
         #TODO: Make dme signal generation dependent on .ac analysis points
-        dme_signals.append(dme_wave())
+        dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=1253))
+
+    #experiment to put a single pole lpf on the dme signal
+    RC = 10e6 / (2*math.pi)
+    pspec_plot.plot(dme_signals[0].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
+    #pspec_plot.plot(dme_signals[2].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
+    #pspec_plot.plot(dme_signals[3].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
+    #pspec_plot.plot(dme_signals[4].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
 
 
-    #plot the power spectrum (magnitude) of the input DME signal
-    ax4.plot(dme_signals[0].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
-    #ax4.plot(dme_signals[1].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
-    #ax4.plot(dme_signals[2].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
-    #ax4.plot(dme_signals[3].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
-    #ax4.plot(dme_signals[4].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
-
-
+    #per node data:
+    #transfer function
+    #tx_psd
+    
     print("#Generating Eye Diagrams")
-    eye_nodes = [nodes[1], nodes[-1]]
+    eye_node_plot = [nodes[0], nodes[1], nodes[-4], nodes[-1]]
+    eye_data = []
     try :
-        for z,n in enumerate(eye_nodes):
-            print(n)
-            xt = []
-            yt = []
-            lap=80e-9
-            nbins=161
-            bin_width=lap/nbins
-            bins = [[] for x in range(int(lap / bin_width))]
+        for z,n in enumerate(nodes):
+            #print(n)
+            t_domain_sigs = []
 
-            #wrap the signal around an 80ns period (time % 80ns)
-            #chop period into 1ns bins
-            #place samples in the bins
-            #loop through the bins, find bin with lowest pk-pk value
-            #look for the bin with the smallest peak to peak value, this is probably the 0 crossing area
-
+            #use many dme signal ffts to thicken the eye diagrams
             for dme in dme_signals:
                 if n != tx_node or True:
+                    #multiply transmit fft by transfer function to node of interest
                     fft_out = rf.fft_transfer(
                             dme.fft_value,
                             tx_node.phy_port_voltage(),
                             n.phy_port_voltage())
 
-                    signal = np.fft.irfft(fft_out)
-                    t=0
-                    #ax4.plot(dme_signals[0].fft_freq, 20*np.log10(np.absolute(fft_out)))
-                    for i in range(0,len(signal)):
-                        tn = i/81.92e6
-                        if (tn - t) > lap:
-                           t+=lap
-                        b = int((tn-t)/bin_width) 
-                        bins[b].append((tn-t,signal[i]))
+                    #invert fft to recover time domain signal
+                    t_domain_sigs.append(np.fft.irfft(fft_out))
 
-                    
-                    #print(bins[0])
+            #pass the list of rx time domain signals to the eye diagram object
+            eye_data.append(eye_diagram(t_domain_sigs, per, 1/Fs, node_number=n.number))
+            #print("%02d eye0: %e eye1: %e" % (z+1,eye_data[-1].eye_area_0,eye_data[-1].eye_area_1))
 
-            #look for the bin with the smallest peak to peak value, this is probably the 0 crossing area
-            min_ptp=1e6 #an unreasonably big number...
-            min_bin=0
-            for b in range(len(bins)):
-                (x,y) = np.ptp(bins[b],axis=0)
-                if(y < min_ptp):
-                    min_ptp = y
-                    min_bin = b
-
-            #move data from the bins into the eye-diagram output
-            #the eye diagram output is a scatter plot so causality of each point is not very important
-            #subtract min_bin*bin_width from the timepoint values to center the transition on 0ns
-            #adding half of a bin to the offset keeps the bin centered and it looks nicer in the plot
-            tn = bin_width*(min_bin+0.5)
-            for i in range(0,len(bins)):
-                index = (i+min_bin) % len(bins)
-                for s in bins[index]:
-                    yt.append(s[1])
-                    time = s[0]-tn
-                    if(time < 0):
-                        time+=80e-9
-                    xt.append(time)
-
-            s = "Node %d - toffset %.2fns" % (n.number, tn*1e9)
+        #saturation_level is the histogram / heatmap level that makes the heatmap eyediagrams saturate color.
+        #Without this, the eye diagram gets normalized to the largest bin. This makes the sparse data hard to see.
+        #The level is automatically set to 1/2 the zero crossing bin height of the input dme signal
+        saturation_index = int(eye_data[0].nbins/2)
+        saturation_level = np.amax(eye_data[0].heatmap[int(eye_data[0].nbits/2)][eye_data[0].index1:eye_data[0].index2])/3
+        print("Saturation_level (%d): %d" % (saturation_index, saturation_level))
+        for z,n in enumerate(eye_node_plot):
+            eye_data_index = n.number-1
+            s = "Node %d - toffset %.2fns" % (n.number, eye_data[eye_data_index].t_offset*1e9)
+            s2 = "Node %d - cross widths %.2fns / %.2fns" % (n.number, eye_data[eye_data_index].crossing1_width*1e9, eye_data[eye_data_index].crossing2_width*1e9)
             eps[z].set_title(s)
-            eps[z].set_xlim([-10e-9,90e-9])
-            eps[z].set_ylim([-0.8,0.8])
-            eps[z].grid(b=True)
-            eps[z].scatter(xt, yt, s=1, color=color_array[n.number-2])  # Plot more data on the axes...
-        #eye.plot(xt, yt)  # Plot more data on the axes...
+            eps[z+4].set_title(s2)
+            eps[z].set_xlim([-5,eye_data[eye_data_index].nbins+5])
+            #eps[z].set_xlim([-10e-9,90e-9])
+            #eps[z].set_ylim([-0.8,1.8])
+            #eps[z+4].set_xlim([-10e-9,90e-9])
+            eps[z+4].set_ylim([-1,saturation_level])
+            #eps[z+4].set_ylim([-0.8,0.8])
+            #eps[z].grid(b=True)
+            #eps[z+4].scatter(eye_data[eye_data_index].xt, eye_data[eye_data_index].yt, s=1, color=color_array[n.number-2])  # Plot more data on the axes...
+            eps[z+4].plot(range(eye_data[eye_data_index].nbins), eye_data[eye_data_index].zero_crossing_array, color=color_array[n.number-2])  # Plot more data on the axes...
+            #eps[z+4].plot(eye_data[eye_data_index].amp_x, eye_data[eye_data_index].average_yp, color='k')  # Plot more data on the axes...
+            #eps[z+4].plot(eye_data[eye_data_index].amp_x, eye_data[eye_data_index].average_yn, color='k')  # Plot more data on the axes...
+            #eps[z].scatter(eye_data[eye_data_index].amp_x, eye_data[eye_data_index].amp_y, s=1, color=color_array[n.number-2])  # Plot more data on the axes...
+            eps[z].imshow(eye_data[eye_data_index].heatmap, cmap='hot', origin='lower', vmin=0, vmax=saturation_level, aspect='auto')  # Plot more data on the axes...
     except Exception as e:
         print(e)
         print("issues generating eye diagram")
@@ -1016,10 +1011,10 @@ if __name__ == '__main__':
                 #print("%.12f %.12f" % (tn-t, signal[i]))
                 yt.append(abs(signal[i]))
                 xt.append(tn-t)
-            ax3.set_xlim([-20e-9,20e-9+(pulse.tper)])
-            ax3.set_ylim([40,60])
-            ax3.grid(b=True)
-            ax3.scatter(xt, yt, s=1, color=color_array[0])  # Plot more data on the axes...
+            cm_plot.set_xlim([-20e-9,20e-9+(pulse.tper)])
+            cm_plot.set_ylim([40,60])
+            cm_plot.grid(b=True)
+            cm_plot.scatter(xt, yt, s=1, color=color_array[0])  # Plot more data on the axes...
 
 
         except Exception as e:

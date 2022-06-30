@@ -1,0 +1,227 @@
+{
+  "nodes": 16,
+  "length": 75,
+  "start_pad": 0,
+  "end_pad": 0,
+  "start_attach": 1,
+  "end_attach": 14,
+  "noautoscale": false,
+  "termination": {
+    "start": {
+      "comment": "cmatch declares how well the terminations match (in pct), 0 means perfet match. -1 means ccn is 1% high, ccp i 1% low",
+      "rterm": 104,
+      "rtol": 0,
+      "ccouple": 2.2e-07,
+      "cmatch": 1
+    },
+    "end": {
+      "comment": "cmatch declares how well the terminations match (in pct), 0 means perfet match. -1 means ccn is 1% high, ccp i 1% low",
+      "rterm": 104,
+      "rtol": 0,
+      "ccouple": 2.2e-07,
+      "cmatch": 1
+    }
+  },
+  "trunk_description": {
+    "comment": "Describes individual cable segments. Not all segments need to be defined.  Segments that aren't defined will default to 'default_cable'. Segment '0' is the segment between the start termination and the 1st node. A segment number that is equal to the number of nodes, (defined by either the nodes parameter, or the length of 'attach_points', if defined) represents a segment between the last node and the end terminator.  Zo does not need to be specified.  If it is then the cable model for the specified gauge will be 'pulled' (skew l/c numbers) until the characteristic impedance is the same as is specified by Zo.  Otherwise Zo is determined by sqrt(l/c) specified for that .",
+    "segments": [
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 96,
+        "spice_model": "tlump",
+        "segment": 0
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 104,
+        "spice_model": "tlump",
+        "segment": 1
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 96,
+        "spice_model": "tlump",
+        "segment": 2
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 104,
+        "spice_model": "tlump",
+        "segment": 3
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 96,
+        "spice_model": "tlump",
+        "segment": 4
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 104,
+        "spice_model": "tlump",
+        "segment": 5
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 96,
+        "spice_model": "tlump",
+        "segment": 6
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 104,
+        "spice_model": "tlump",
+        "segment": 7
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 96,
+        "spice_model": "tlump",
+        "segment": 8
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 104,
+        "spice_model": "tlump",
+        "segment": 9
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 96,
+        "spice_model": "tlump",
+        "segment": 10
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 104,
+        "spice_model": "tlump",
+        "segment": 11
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 96,
+        "spice_model": "tlump",
+        "segment": 12
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 104,
+        "spice_model": "tlump",
+        "segment": 13
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 96,
+        "spice_model": "tlump",
+        "segment": 14
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 104,
+        "spice_model": "tlump",
+        "segment": 15
+      },
+      {
+        "model": "panduit_18g",
+        "gauge": 18,
+        "Zo": 96,
+        "spice_model": "tlump",
+        "segment": 16
+      }
+    ]
+  },
+  "defaults_comment": "This are the default configuration parameters.  These can be overridden by command line args or by fields in a test-specific json file",
+  "random_attach": false,
+  "separation_min": 1.0,
+  "segments_per_meter": 20,
+  "drop_max": 0.02,
+  "random_drop": false,
+  "seed": 111030,
+  "tx_node": 1,
+  "attach_error": 0,
+  "attach_points": [
+    0.0,
+    54.0,
+    62.0,
+    63.0,
+    64.0,
+    65.0,
+    66.0,
+    67.0,
+    68.0,
+    69.0,
+    70.0,
+    71.0,
+    72.0,
+    73.0,
+    74.0,
+    75.0
+  ],
+  "noplot": false,
+  "plot_png_filename": "zcable.png",
+  "eye_adjust": [
+    0,
+    0
+  ],
+  "default_termination": {
+    "comment": "cmatch declares how well the terminations match (in pct), 0 means perfet match. -1 means ccn is 1% high, ccp i 1% low",
+    "rterm": 100,
+    "rtol": 0,
+    "ccouple": 2.2e-07,
+    "cmatch": 0.0
+  },
+  "default_node": {
+    "drop_length": 0.01,
+    "random_drop": false,
+    "cnode": 3e-11,
+    "lcomp": 5e-14,
+    "lpodl": 8e-05,
+    "rnode": 10000.0,
+    "lcomp_match": 1,
+    "spice_model": "node",
+    "drop_model": null
+  },
+  "default_segment": {
+    "model": "panduit_18g",
+    "gauge": 18,
+    "Zo": null,
+    "spice_model": "tlump"
+  },
+  "cable_models": {
+    "panduit_18g": {
+      "name": "panduit_18g",
+      "comment": "#18 gauge cable. Original data was for a 5cm segment.  Divide by ref_length to get 1m referenced values.",
+      "gauge": 18,
+      "ref_length": 0.05,
+      "rskin": 1.134268e-05,
+      "l": 2.06435e-08,
+      "c": 2.25026e-12,
+      "rdc": 0.0094
+    },
+    "random_junk": {
+      "comment": "This is a random set of number used to test the model's parser",
+      "gauge": 18,
+      "ref_length": 0.05,
+      "rskin": 2e-05,
+      "l": 2e-08,
+      "c": 2e-12,
+      "rdc": 0.01
+    }
+  }
+}

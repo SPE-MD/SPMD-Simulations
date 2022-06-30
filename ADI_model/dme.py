@@ -223,6 +223,18 @@ class dme_wave(object):
 
         self._sample_dme()
         self._fft_dme()
+        cutoff = 20e6
+        order = 1
+        self._lpf_dme(cutoff, order)
+
+    def _lpf_dme(self, cutoff, order):
+        RC = cutoff / (2*math.pi)
+        if(order < 1):
+            return
+
+        for i,f in enumerate(self.fft_freq):
+            h = 1 / ((complex(0,(f/(2*math.pi)))/RC)**order + 1)
+            self.fft_value[i] = h * self.fft_value[i]
 
     def _sample_dme(self):
         self.sampled_times  = []
@@ -255,6 +267,198 @@ class dme_wave(object):
         #with open("dme_wave.fft", 'w') as fft:
         #    for i in range(0,len(fft_freq)):
         #        fft.write("{:.12f} {:.12g}\n".format(fft_freq[i], fft_value[i]))
+
+
+#generate eye diagrams from a 1d (y points only) array where data was sampled with
+#the specified sample rate and the data bit(s) have the specified sample period
+#t_domain_sigs is a list of time domain signals.  Each one will be added to the eye diagram
+class eye_diagram(object):
+    def __init__(self,t_domain_sigs,symbol_period=80e-9,sample_rate=1/81.92e6,node_number=0):
+        self.symbol_period=symbol_period
+        self.sample_rate=sample_rate
+        self.t_domain_sigs = t_domain_sigs
+        self.nbins=320
+        self.nbits=256
+        self.bin_width=symbol_period/self.nbins
+        self.bins   = [[] for x in range(self.nbins)]
+        self.bins_p = [[] for x in range(self.nbins)]
+        self.bins_n = [[] for x in range(self.nbins)]
+        self.t_offset = 0
+        self.xt = []
+        self.yt = []
+        self.amp_y = []
+        self.amp_x = []
+        self.heatmap = np.zeros(shape=(self.nbits, self.nbins))
+        #self.average_yp = []
+        #self.average_yn = []
+        #self.average_x = []
+
+        self.eye_area_0 = 0
+        self.eye_area_1 = 1 
+        self._make_eye()
+
+    #wrap the signal around an 80ns period (time % 80ns)
+    #chop period into 0.5ns bins
+    #place samples in the bins
+    #loop through the bins, find bin with lowest pk-pk value
+    #look for the bin with the smallest peak to peak value, this is probably the 0 crossing area
+    def _make_histogram_2d(self) -> None:
+        self.bins   = [[] for x in range(self.nbins)]
+        self.bins_p = [[] for x in range(self.nbins)]
+        self.bins_n = [[] for x in range(self.nbins)]
+        for sig in self.t_domain_sigs:
+            t=0
+            #make histogram of time domain signal wrapped around (modulo) symbol_period
+            for i in range(0,len(sig)):
+                tn = i * self.sample_rate
+                if (tn - t) > self.symbol_period:
+                   t+=self.symbol_period
+                b = int((tn-t)/self.bin_width) 
+                self.bins[b].append((tn-t,sig[i]))
+
+        #look for the bin with the smallest peak to peak value, this is probably the 0 crossing area
+        min_ptp=1e6 #an unreasonably big number...
+        self.min_bin=0
+        for b in range(len(self.bins)):
+            (x,y) = np.ptp(self.bins[b],axis=0)
+            if(y < min_ptp):
+                min_ptp = y
+                self.min_bin = b
+
+        #move data from the bins into the eye-diagram output
+        #the eye diagram output is a scatter plot so causality of each point is not very important
+        #subtract min_bin*bin_width from the timepoint values to center the transition on 0ns
+        #adding half of a bin to the offset keeps the bin centered and it looks nicer in the plot
+        self.t_offset = self.bin_width*(self.min_bin+0.5)
+        for i in range(0,len(self.bins)):
+            index = (i+self.min_bin) % len(self.bins)
+            for s in self.bins[index]:
+                self.yt.append(s[1])
+                time = s[0]-self.t_offset
+                if(time < 0):
+                    time+=self.symbol_period
+                self.xt.append(time)
+
+    def _digitize(self, vmax=1, vmin=-1, nbits=256, v=0) -> int:
+        #move voltages to a 0 based system
+        if(v >= vmax):
+            return nbits-1
+        if(v <= vmin):
+            return 0
+        vx = v - vmin
+        vm = vmax - vmin
+        vn = 0
+        return int(nbits * vx / vm)
+
+    def _measure_opening_x(self,start_index):
+        index0=start_index
+        index1=start_index
+
+        for i in range(start_index,-1,-1):
+            if(self.zero_crossing_array[i] != 0):
+                index0 = i+1
+                break
+
+        for i in range(start_index,self.nbins,1):
+            if(self.zero_crossing_array[i] != 0):
+                index1 = i-1
+                break
+
+        return(index0,index1)
+
+    def _measure_opening_area(self,start_index,end_index):
+        opening = 0
+
+        #for i in range(start_index,end_index):
+        #p  = np.amin(self.heatmap[129:],axis=0)
+
+        return(opening)
+
+    def plot_eye(self, filename='eye.png'):
+        fig2, eye = plt.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
+        s = "Node %d - toffset %.2fns" % (n.number, eye_data[eye_data_index].t_offset*1e9)
+
+    def _make_eye(self):
+        #generate a centered 2d histogram
+        self._make_histogram_2d()
+    
+        vmax=0.75
+        vmin=-0.75
+        for i in range(0,len(self.bins)):
+            index = (i+self.min_bin) % len(self.bins)
+            for s in self.bins[index]:
+                bin_y = self._digitize(vmax, vmin, self.nbits, s[1])
+                self.heatmap[bin_y][i] += 1
+
+        zero_crossing_index = int(self.nbits/2)
+        self.zero_crossing_array = \
+                  self.heatmap[zero_crossing_index + 0 ]\
+                + self.heatmap[zero_crossing_index + 1 ]\
+                + self.heatmap[zero_crossing_index - 1 ]
+        (self.index0,self.index1) = self._measure_opening_x(int(self.nbins/4))
+        (self.index2,self.index3) = self._measure_opening_x(int(4*self.nbins/5))
+
+        self.crossing1_width = self.bin_width * ((self.nbins - self.index3) + self.index0)
+        self.crossing2_width = self.bin_width * (self.index2 - self.index1)
+
+        print("%.6e %.6e %3d %3d %3d %3d" % (self.crossing1_width, self.crossing2_width, self.index0, self.index1, self.index2, self.index3))
+
+        self._measure_opening_area(self.index0, self.index1)
+
+        #    #calculate area under eye openings
+        #    #start by determining the eye opening heights
+        #    (t,p) = np.amin(self.bins_p[index],axis=0)
+        #    (t,m) = np.amax(self.bins_n[index],axis=0)
+        #    self.amp_y.append(p-m)
+        #    tn = self.bin_width*(i+0.5)
+        #    self.amp_x.append(tn)
+
+        #    (t,p) = np.mean(self.bins_p[index],axis=0)
+        #    (t,m) = np.mean(self.bins_n[index],axis=0)
+        #    #self.average_yp.append(p)
+        #    #self.average_yn.append(m)
+
+
+
+        ##start at 1st bin, eye should be closed in this bin
+        ##seek forward through bins and record where the eye opens and closes
+        #o1=0
+        #c1=0
+        #o2=0
+        #c2=0
+        #threshold=0.1
+        #hysteresis=0.025
+        #state=0
+        #th_rise=threshold+hysteresis
+        #th_fall=threshold-hysteresis
+        #for i in range(self.nbins):
+        #    p = self.amp_y[i]
+        #    if(state == 0):
+        #        if p > th_rise:
+        #            state = 1
+        #            o1 = i
+        #    elif(state == 1):
+        #        if p < th_fall:
+        #            state = 2
+        #            c1 = i
+        #    elif(state == 2):
+        #        if p > th_rise:
+        #            state = 3
+        #            o2 = i
+        #    elif(state == 3):
+        #        if p < th_fall:
+        #            state = 4
+        #            c2 = i
+        ##print("O1: %d" % o1)
+        ##print("C1: %d" % c1)
+        ##print("O2: %d" % o2)
+        ##print("C2: %d" % c2)
+        #self.eye_area_0 = 0
+        #self.eye_area_1 = 0
+        #for i in range(o1,c1):
+        #    self.eye_area_0 += self.amp_y[i]*self.bin_width
+        #for i in range(o2,c2):
+        #    self.eye_area_1 += self.amp_y[i]*self.bin_width
 
 
 if __name__ == '__main__':
