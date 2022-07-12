@@ -15,7 +15,7 @@ import argparse
 import time
 import random
 import numpy as np
-from scipy.signal import butter, lfilter, freqz
+#from scipy.signal import butter, lfilter, freqz
 import math
 import matplotlib.pyplot as plt
 import datetime
@@ -31,7 +31,7 @@ import mpUtil
 from ltcsimraw import ltcsimraw as ltcsimraw
 #from steptable import StepTable
 from spifile import SpiFile as SpiFile
-from micro_reflections import micro_reflections
+#from micro_reflections import micro_reflections
 
 from cable import Cable as Cable
 from cable import CableModel as CableModel
@@ -43,6 +43,75 @@ from t_connector import T_connector as T_connector
 from dme import dme_wave as dme_wave
 from dme import pulse_wave as pulse_wave
 from dme import eye_diagram 
+
+def _readTxt(infile):
+    try :
+        file = open(infile)
+    except:
+        print("cannot open: %s" % infile)
+        return ""
+
+    text = ""
+    with file as inf:
+        #self.text = []
+        for line in inf:
+            #line = line.rstrip()
+            text += line
+    inf.close
+    return text
+
+def writeHtml(config, eye_data):
+        header_txt = _readTxt(os.path.join(config['htmlTemplates'],config['headerHtml']))
+        tailer_txt = _readTxt(os.path.join(config['htmlTemplates'],config['tailerHtml']))
+        css_file = os.path.join(config['htmlTemplates'],config['cssFile'])
+        try:
+            dst = os.path.join("data",config['design_md5'],config['cssFile'])
+            src = css_file
+            shutil.copyfile(src, dst)
+
+        except:
+            print("Cannot copy .css file")
+            exit(1)
+
+        html = header_txt
+        html += "<body>"
+        html += "<DIV class=content>"
+        html += "<DIV class=main>"
+        html += "<p class=label>%s</p>" % config['design_md5']
+        html += "</DIV>"
+        html += "</DIV>"
+
+        html += "<HR>"
+        html += "<img src=\"img/%s\" alt=\"img/%s\"></img>" % (config['plot_png_filename'], config['plot_png_filename'])
+        html += "<HR>"
+        html += "<img src=\"img/%s\" alt=\"img/%s\"></img>" % (config['corr_png_filename'], config['corr_png_filename'])
+        html += "<HR>"
+
+        html += "<table align=\"center\">"
+        html += "<TR>"
+        n=0
+        for e in eye_data:
+            #html += e.getHtmlOutput()
+            eye_plot = "eye%d.png" % e.number
+            html += "<TD>"
+            html += "<a href=\"img/%s\">" % eye_plot
+            html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"300\"></img>" % (eye_plot, eye_plot)
+            html += "</a>"
+            html += "</TD>"
+            n+=1
+            if(n % 4 == 0):
+                html += "</TR><TR>"
+        html += "</TR>"
+        html += "</table>"
+        html += tailer_txt
+
+        htmlFile = os.path.join("data",config['design_md5'],'report.html')
+        f = open(htmlFile,"w")
+        f.write(html)
+        f.close()
+        import webbrowser
+        webbrowser.open(htmlFile, new=0, autoraise=True)
+
 
 def butter_lowpass(cutoff, fs, order=1):
     return butter(order, cutoff, fs=fs, btype='lowpass', analog=False)
@@ -335,6 +404,8 @@ if __name__ == '__main__':
         config['default_node']['lpodl']       = args.lpodl
     if args.rnode:
         config['default_node']['rnode']       = args.rnode
+    if args.rnode:
+        config['noplot']                      = args.noplot
 
     ################################################################################
     #Setup random seed in case this run has random parameters
@@ -708,6 +779,8 @@ if __name__ == '__main__':
     rawSave  = os.path.join("data",design_md5,design_md5+".raw")
     jsonSave = os.path.join("data",design_md5,design_md5+".json")
     outputdb = os.path.join("data",design_md5)
+    imgDir   = os.path.join("data",design_md5,"img")
+    config['design_md5'] = design_md5
 
 
     #print( design_md5)
@@ -734,6 +807,15 @@ if __name__ == '__main__':
             print( "Cannot create regression folder")
             exit(1)
 
+    if not os.path.exists(imgDir):
+        print( "img Folder %s does not exist" % imgDir)
+        print( "Creating...." )
+        try:
+            os.makedirs(imgDir)
+        except:
+            print( "Cannot create img folder")
+            exit(1)
+
     #if there is already raw and log data in the md5 directory then assume the sim has 
     #already been run, otherwise run the sim
     try:
@@ -755,13 +837,9 @@ if __name__ == '__main__':
     #containers to hold output data for plotting
     fig, (rl_plot, il_plot, cm_plot, pspec_plot, network_plot) = plt.subplots(5,1, figsize=(9, 10))  # Create a figure and an axes.
 
-    fig2, eye_plots = plt.subplots(2,4, figsize=(20, 10))  # Create a figure and an axes.
-    eps = (eye_plots[0][0], eye_plots[0][1], eye_plots[0][2], eye_plots[0][3], eye_plots[1][0], eye_plots[1][1], eye_plots[1][2], eye_plots[1][3])
-    #eps = (eye_plots[0], eye_plots[1], eye_plots[2], eye_plots[3])
-
+    
     #set the simulation command as the window title.
     fig.canvas.manager.set_window_title(" ".join(sys.argv))
-    fig2.canvas.manager.set_window_title(" ".join(sys.argv))
 
     frequency = []
     s11_plot  = []
@@ -775,6 +853,7 @@ if __name__ == '__main__':
     #Extract data from the rawfile
     ################################################################################
     rf=ltcsimraw(rawSave)
+    sparams=None
     for n in nodes:
         if n != tx_node:
             sparams = rf.scattering_parameters(
@@ -832,15 +911,15 @@ if __name__ == '__main__':
 
     rl_limit = return_loss_limit(frequency[0])
     il_limit = insertion_loss_limit(frequency[0])
-    rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit")  # Plot more data on the axes...
-    il_plot.plot(frequency[0], il_limit, label="clause 147 limit")  # Plot more data on the axes...
-    rl_plot.plot(frequency[0], s11_plot[0], label="test", color='k')  # Plot more data on the axes...
+    rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit")  
+    il_plot.plot(frequency[0], il_limit, label="clause 147 limit")  
+    rl_plot.plot(frequency[0], s11_plot[0], label="test", color='k')  
     timeDomainData = []
     for i,p in enumerate(frequency):
-        il_plot.plot(frequency[i], s21_plot[i], label="test", color=color_array[i])  # Plot more data on the axes...
-        cm_plot.plot(frequency[i], dm_cm_plot[i], label="test", color=color_array[i])  # Plot more data on the axes...
-        #rl_plot.plot(frequency[i], s11_plot[i])  # Plot more data on the axes...
-        #il_plot.plot(frequency[i], s21_plot[i])  # Plot more data on the axes...
+        il_plot.plot(frequency[i], s21_plot[i], label="test", color=color_array[i])  
+        cm_plot.plot(frequency[i], dm_cm_plot[i], label="test", color=color_array[i])  
+        #rl_plot.plot(frequency[i], s11_plot[i])  
+        #il_plot.plot(frequency[i], s21_plot[i])  
         #timeDomainDataRaw = frequency_dom_to_time_dom(s21_plot[i])
         #timeDomainData.append(timeDomainDataRaw[0:int(len(timeDomainDataRaw)/2)])
         #cm_plot.plot(range(len(timeDomainData[i])), timeDomainData[i], label="time", color=color_array[i])  # Plot more data on the axes...
@@ -893,8 +972,8 @@ if __name__ == '__main__':
     network_plot.vlines(trunk.attach_points, 0, plot_drop, color="tab:red")
 
     cm_plot.set_ylabel('CM / TX_DM')  # Add an y-label to the axes.
-    pspec_plot.set_ylabel('DME Input Spectrum')  # Add an y-label to the axes.
     #cm_plot.set_xlabel('Time')  # Add a y-label to the axes.
+
 
     ################################################################################
     # Eye Diagram Generation
@@ -904,23 +983,25 @@ if __name__ == '__main__':
     #get 5 random data sequences to make the eye diagrams nice and thick
     for i in range(0,10):
         #TODO: Make dme signal generation dependent on .ac analysis points
-        dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=1253))
+        dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=1253,amplitude=0.010,zin=sparams['zin']))
+        #dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=1253,amplitude=0.5,zin=None))
+    dme_signals[-1].output_pwl_to_file()
+    dme_signals[-1].output_sampled_pwl_to_file()
 
-    #experiment to put a single pole lpf on the dme signal
-    RC = 10e6 / (2*math.pi)
-    pspec_plot.plot(dme_signals[0].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
-    #pspec_plot.plot(dme_signals[2].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
-    #pspec_plot.plot(dme_signals[3].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
-    #pspec_plot.plot(dme_signals[4].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)))
+    #pspec_plot.plot(dme_signals[-1].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)),color=color_array[color_index-1])
 
+    #save the plot as a png file incase another script is making a gif
+    #pspec_plot.plot(dme_signals[-1].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)),color=color_array[color_index-1])
+    #config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
+    #plt.savefig(config['plot_png'])
 
     #per node data:
     #transfer function
     #tx_psd
     
     print("#Generating Eye Diagrams")
-    eye_node_plot = [nodes[0], nodes[1], nodes[-4], nodes[-1]]
     eye_data = []
+    fft_out_list = []
     try :
         for z,n in enumerate(nodes):
             #print(n)
@@ -937,36 +1018,98 @@ if __name__ == '__main__':
 
                     #invert fft to recover time domain signal
                     t_domain_sigs.append(np.fft.irfft(fft_out))
+                    fft_out_list.append(fft_out)
 
             #pass the list of rx time domain signals to the eye diagram object
-            eye_data.append(eye_diagram(t_domain_sigs, per, 1/Fs, node_number=n.number))
+            eye_data.append(eye_diagram(t_domain_sigs, per, 1/Fs,
+                node_number=n.number, imgDir=imgDir))
             #print("%02d eye0: %e eye1: %e" % (z+1,eye_data[-1].eye_area_0,eye_data[-1].eye_area_1))
+
+        #save the plot as a png file incase another script is making a gif
+        pspec_plot.set_ylabel('DME Output Spectrum')  # Add an y-label to the axes.
+        pspec_plot.plot(dme_signals[-1].fft_freq, 20*np.log10(np.absolute(fft_out_list[-1])),color=color_array[color_index-1])
+        config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
+        plt.savefig(config['plot_png'])
 
         #saturation_level is the histogram / heatmap level that makes the heatmap eyediagrams saturate color.
         #Without this, the eye diagram gets normalized to the largest bin. This makes the sparse data hard to see.
         #The level is automatically set to 1/2 the zero crossing bin height of the input dme signal
-        saturation_index = int(eye_data[0].nbins/2)
-        saturation_level = np.amax(eye_data[0].heatmap[int(eye_data[0].nbits/2)][eye_data[0].index1:eye_data[0].index2])/3
+        #saturation_index = int(eye_data[0].nbins/2)
+        #saturation_level = np.amax(eye_data[0].heatmap[int(eye_data[0].nbits/2)][eye_data[0].index1:eye_data[0].index2])/3
+        saturation_index = 0
+        saturation_level = eye_data[0].zero_crossing_array[0]/3
         print("Saturation_level (%d): %d" % (saturation_index, saturation_level))
-        for z,n in enumerate(eye_node_plot):
-            eye_data_index = n.number-1
-            s = "Node %d - toffset %.2fns" % (n.number, eye_data[eye_data_index].t_offset*1e9)
-            s2 = "Node %d - cross widths %.2fns / %.2fns" % (n.number, eye_data[eye_data_index].crossing1_width*1e9, eye_data[eye_data_index].crossing2_width*1e9)
-            eps[z].set_title(s)
-            eps[z+4].set_title(s2)
-            eps[z].set_xlim([-5,eye_data[eye_data_index].nbins+5])
-            #eps[z].set_xlim([-10e-9,90e-9])
-            #eps[z].set_ylim([-0.8,1.8])
-            #eps[z+4].set_xlim([-10e-9,90e-9])
-            eps[z+4].set_ylim([-1,saturation_level])
-            #eps[z+4].set_ylim([-0.8,0.8])
-            #eps[z].grid(b=True)
-            #eps[z+4].scatter(eye_data[eye_data_index].xt, eye_data[eye_data_index].yt, s=1, color=color_array[n.number-2])  # Plot more data on the axes...
-            eps[z+4].plot(range(eye_data[eye_data_index].nbins), eye_data[eye_data_index].zero_crossing_array, color=color_array[n.number-2])  # Plot more data on the axes...
-            #eps[z+4].plot(eye_data[eye_data_index].amp_x, eye_data[eye_data_index].average_yp, color='k')  # Plot more data on the axes...
-            #eps[z+4].plot(eye_data[eye_data_index].amp_x, eye_data[eye_data_index].average_yn, color='k')  # Plot more data on the axes...
-            #eps[z].scatter(eye_data[eye_data_index].amp_x, eye_data[eye_data_index].amp_y, s=1, color=color_array[n.number-2])  # Plot more data on the axes...
-            eps[z].imshow(eye_data[eye_data_index].heatmap, cmap='hot', origin='lower', vmin=0, vmax=saturation_level, aspect='auto')  # Plot more data on the axes...
+
+        eye1 = []
+        eye2 = []
+        cross1 = []
+        cross2 = []
+        delay = []
+        cross_time = []
+        cross_time_min  = []
+        cross_time_max  = []
+        for e in eye_data:
+            e.plot_eye(saturation_level=saturation_level) #plot the 2d histogram
+            e.plot_slice() #plot the zero crossing slice from the 2d histogram
+            eye1.append(e.eye_area_1*1e9)
+            eye2.append(e.eye_area_2*1e9)
+            cross1.append(e.crossing1_width*1e9)
+            cross2.append(e.crossing2_width*1e9)
+            delay.append(e.t_offset*1e9)
+            cross_time.append(e.crossing_time*1e9)
+            cross_time_min.append(e.crossing_time_min*1e9)
+            cross_time_max.append(e.crossing_time_max*1e9)
+
+        fig2, eye_plots = plt.subplots(2,2, figsize=(10, 10))  # Create a figure and an axes.
+        fig2.canvas.manager.set_window_title(" ".join(sys.argv))
+        eps = (eye_plots[0][0], eye_plots[0][1],
+               eye_plots[1][0], eye_plots[1][1])
+
+        eps[0].set_xlabel("Attach Point (m)")
+        eps[0].set_ylabel("Eye Opening Area (V*ns)")
+        eps[0].plot(trunk.attach_points, eye1  , 'o', label="eye1")
+        eps[0].plot(trunk.attach_points, eye2  , 'o', label="eye2")
+        eps[0].legend()
+
+        eps[1].set_xlabel("Attach Point (m)")
+        eps[1].set_ylabel("Zero Cross Widths (ns)")
+        eps[1].plot(trunk.attach_points, cross1, 'o')
+        eps[1].plot(trunk.attach_points, cross2, 'o')
+
+        eps[2].set_xlabel("Attach Point (m)")
+        eps[2].set_ylabel("Delay mod 80ns (ns)")
+        eps[2].plot(trunk.attach_points, delay , 'o')
+
+        #eps[3].set_xlabel("Zero Cross Width (s)")
+        #eps[3].set_ylabel("Delay (s)")
+        #eps[3].plot(cross2, delay , 'o')
+
+        eps[3].set_xlabel("Attach Point (m)")
+        eps[3].set_ylabel("Zero Cross Time (ns)")
+
+        eps[3].plot(trunk.attach_points, cross_time_max , '-', label='max')
+        eps[3].plot(trunk.attach_points, cross_time     , '-', label='mean')
+        eps[3].plot(trunk.attach_points, cross_time_min , '-', label='min')
+        eps[3].legend()
+
+        config['corr_png'] = os.path.join("data",design_md5,"img",config['corr_png_filename'])
+        plt.savefig(config['corr_png'])
+
+        loop = []
+        for e in eye_data:
+            loop.append(e.imgfile)
+        for e in reversed(eye_data):
+            loop.append(e.imgfile)
+
+        print("Compiling Gif")
+        import imageio.v2 as imageio
+        images = []
+        gif_file = os.path.join("data",design_md5,"img","eye.gif") 
+        for filename in loop:
+            images.append(imageio.imread(filename))
+        imageio.mimsave(gif_file, images)
+        print("generated gif: %s" % gif_file)
+
     except Exception as e:
         print(e)
         print("issues generating eye diagram")
@@ -974,6 +1117,16 @@ if __name__ == '__main__':
     ################################################################################
     # End Eye Diagram Generation
     ################################################################################
+
+    ################################################################################
+    # Generate HTML output
+    ################################################################################
+    print("Generating .html report")
+    writeHtml(config, eye_data)
+    ################################################################################
+    # End Eye Diagram Generation
+    ################################################################################
+
 
     ################################################################################
     #Time Domain Reflectometer Output
@@ -1021,10 +1174,7 @@ if __name__ == '__main__':
             print(e)
             print("issues generating pulse response")
 
-
-
-    #save the plot as a png file incase another script is making a gif
-    plt.savefig(config['plot_png_filename'])
     if not config['noplot']:
-        print("#Close plot window to continue")
-        plt.show()
+        #print("#Close plot window to continue")
+        #plt.show()
+        plt.close()

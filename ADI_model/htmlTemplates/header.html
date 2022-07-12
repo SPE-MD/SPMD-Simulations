@@ -1,0 +1,27 @@
+<link rel="stylesheet" type="text/css" href="promis.css">
+<head><link rel="shortcut icon" href="favicon.ico" type="image/x-icon"/> <title>802.3da Consensus Model Output</title>
+<script language="javascript">
+   function getItem(id)
+   {
+      var itm = false;
+      if(document.getElementById)
+      itm = document.getElementById(id);
+      else if(document.all)
+      itm = document.all[id];
+      else if(document.layers)
+      itm = document.layers[id];
+      return itm;
+   }
+   function toggleItem(id)
+   {
+      itm = getItem(id);
+      if(!itm)
+      return false;
+      if(itm.style.display == 'none')
+      itm.style.display = '';
+      else
+      itm.style.display = 'none';
+      return false;
+   }
+</script>
+</head>

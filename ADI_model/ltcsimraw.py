@@ -315,6 +315,7 @@ class ltcsimraw():
         s21=[]
         gain=[]
         phase=[]
+        zin=[50]
         zin_mag=[]
         zin_phase=[]
         for x in data:
@@ -340,6 +341,7 @@ class ltcsimraw():
             gain.append(gain_mp[0])
             phase.append(gain_mp[1])
             dm_cm.append(dm_cm_mp[0])
+            zin.append(vin / iin)
             zin_mag.append(pow(10,self.decodeComplex(vin/iin)[0]/20))
             zin_phase.append(self.decodeComplex(vin/iin)[1])
 
@@ -350,6 +352,7 @@ class ltcsimraw():
             "s21" : s21,
             "gain" : gain,
             "phase" : phase,
+            "zin" : zin,
             "zin_mag" : zin_mag,
             "zin_phase" : zin_phase,
             "dm_cm" : dm_cm,

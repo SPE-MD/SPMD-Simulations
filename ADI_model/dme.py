@@ -14,6 +14,7 @@ import argparse
 from os.path import dirname
 import os.path 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
+import matplotlib.pyplot as pyplot
 import mpUtil
 
 #expects to be initialized with two (x,y) tuples
@@ -192,10 +193,8 @@ class pulse_wave(object):
         #    for i in range(0,len(fft_freq)):
         #        fft.write("{:.12f} {:.12g}\n".format(fft_freq[i], fft_value[i]))
 
-
-
 class dme_wave(object):
-    def __init__(self,ts=1/81.92e6,ns=8192,n_symbols=1250):
+    def __init__(self,ts=1/81.92e6,ns=8192,n_symbols=1253,amplitude=0.5,zin=None):
         self.ts = ts #1/81.92e6
         self.ns = ns #8192
         self.tstop=ts*ns 
@@ -205,27 +204,57 @@ class dme_wave(object):
         pattern[0]=1
         pattern[-1]=0
         tstart = 0
-        self.amp=0.5
+        self.amp=amplitude
         self.trise=10e-9
         self.per=80e-9
-        self.pwl = ["0 %.2f" % self.amp]
+        self.pwl = ["0 %.3f" % self.amp]
         t0 = tstart
         tflat = (self.per-(4*self.trise))/2
         for i in pattern:
-            self.pwl.append("%.12f %.2f" % (t0+self.trise, i-self.amp))
-            self.pwl.append("%.12f %.2f" % (t0+(self.trise+tflat),  i-self.amp))
-            self.pwl.append("%.12f %.2f" % (t0+(3*self.trise+tflat),   -self.amp+(1-i)))
-            self.pwl.append("%.12f %.2f" % (t0+(3*self.trise+2*tflat), -self.amp+(1-i)))
+            x = i * self.amp * 2
+            self.pwl.append("%.12f %.2f" % (t0 +  self.trise           , x-self.amp))
+            self.pwl.append("%.12f %.2f" % (t0 + (self.trise+tflat)    , x-self.amp))
+            self.pwl.append("%.12f %.2f" % (t0 + (3*self.trise+tflat)  ,
+                -self.amp+(2*self.amp*(1-i))))
+            self.pwl.append("%.12f %.2f" % (t0 + (3*self.trise+2*tflat),
+                -self.amp+(2*self.amp*(1-i))))
+            #print("%d %s %s %s %s" % (i, self.pwl[-4], self.pwl[-3], self.pwl[-2], self.pwl[-1]))
             t0 += self.per
-        self.pwl.append("%.12f %.2f" % (self.per*len(pattern), -self.amp+(1-i)))
+        #self.pwl.append("%.12f %.2f" % (self.per*len(pattern), -self.amp+(2*self.amp*(1-i))))
         self.pwl_wave = pwlWave()
         self.pwl_wave.buildPwlFromText(self.pwl)
+
+        #print(amplitude)
+
 
         self._sample_dme()
         self._fft_dme()
         cutoff = 20e6
         order = 1
         self._lpf_dme(cutoff, order)
+
+        if(zin):
+            for i,f in enumerate(self.fft_freq):
+                self.fft_value[i] = zin[i] * self.fft_value[i]
+
+        t_domain_sig = np.fft.irfft(self.fft_value)
+        #print(t_domain_sig)
+        #f, eye = pyplot.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
+        #eye.plot(range(len(t_domain_sig)), t_domain_sig)  # Plot more data on the axes...
+        #eye.set_xlim([0,128])
+        #pyplot.savefig("junk.png")
+        #pyplot.close(f)
+
+    def output_pwl_to_file(self, filename="pwl.txt"):
+        with open(filename, 'w') as out:
+            for p in self.pwl:
+                out.write("%s\n" % p)
+
+    def output_sampled_pwl_to_file(self, filename="sampled_pwl.txt"):
+        with open(filename, 'w') as out:
+            for i in range(0,len(self.sampled_times)):
+                out.write("%.12f %.12f\n" % 
+                        (self.sampled_times[i], self.sampled_values[i]))
 
     def _lpf_dme(self, cutoff, order):
         RC = cutoff / (2*math.pi)
@@ -273,16 +302,23 @@ class dme_wave(object):
 #the specified sample rate and the data bit(s) have the specified sample period
 #t_domain_sigs is a list of time domain signals.  Each one will be added to the eye diagram
 class eye_diagram(object):
-    def __init__(self,t_domain_sigs,symbol_period=80e-9,sample_rate=1/81.92e6,node_number=0):
+    def __init__(self,
+            t_domain_sigs,
+            symbol_period=80e-9,
+            sample_rate=1/81.92e6,
+            node_number=0,
+            imgDir="."):
         self.symbol_period=symbol_period
         self.sample_rate=sample_rate
         self.t_domain_sigs = t_domain_sigs
+        self.number = node_number
+        self.imgDir = imgDir
+        self.imgfile =  os.path.join(imgDir, "eye%d.png" % self.number)
+        self.slicefile =  os.path.join(imgDir, "slice%d.png" % self.number)
         self.nbins=320
         self.nbits=256
         self.bin_width=symbol_period/self.nbins
         self.bins   = [[] for x in range(self.nbins)]
-        self.bins_p = [[] for x in range(self.nbins)]
-        self.bins_n = [[] for x in range(self.nbins)]
         self.t_offset = 0
         self.xt = []
         self.yt = []
@@ -304,8 +340,6 @@ class eye_diagram(object):
     #look for the bin with the smallest peak to peak value, this is probably the 0 crossing area
     def _make_histogram_2d(self) -> None:
         self.bins   = [[] for x in range(self.nbins)]
-        self.bins_p = [[] for x in range(self.nbins)]
-        self.bins_n = [[] for x in range(self.nbins)]
         for sig in self.t_domain_sigs:
             t=0
             #make histogram of time domain signal wrapped around (modulo) symbol_period
@@ -350,33 +384,105 @@ class eye_diagram(object):
         vn = 0
         return int(nbits * vx / vm)
 
-    def _measure_opening_x(self,start_index):
-        index0=start_index
-        index1=start_index
-
-        for i in range(start_index,-1,-1):
-            if(self.zero_crossing_array[i] != 0):
-                index0 = i+1
-                break
-
-        for i in range(start_index,self.nbins,1):
-            if(self.zero_crossing_array[i] != 0):
-                index1 = i-1
-                break
-
-        return(index0,index1)
-
     def _measure_opening_area(self,start_index,end_index):
         opening = 0
 
         #for i in range(start_index,end_index):
-        #p  = np.amin(self.heatmap[129:],axis=0)
+        a2 = np.transpose(self.heatmap)
+        asum = 0
+        for i in range(start_index,end_index+1):
+            #assumes that nonzero returns nonzero indicies in ascending order
+            p = np.nonzero(a2[i][128:])
+            n = np.nonzero(a2[i][:128])
+            #print(i)
+            #print(p)
+            #print(p[0][0]+128)
+            #print(n[0][-1])
+            #exit(1)
+            asum += (p[0][0]+128-n[0][-1])
 
-        return(opening)
+        return(asum)
 
-    def plot_eye(self, filename='eye.png'):
-        fig2, eye = plt.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
-        s = "Node %d - toffset %.2fns" % (n.number, eye_data[eye_data_index].t_offset*1e9)
+    def plot_eye(self, filename=None, saturation_level=12):
+        #print(self.imgfile)
+        if filename==None:
+            filename=self.imgfile
+        else:
+            self.imgfile = filename
+        f, eye = pyplot.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
+        s = "Node %d - toffset %.2fns" % (self.number, self.t_offset*1e9)
+        eye.set_title(s)
+        eye.imshow(self.heatmap, cmap='hot', origin='lower', vmin=0, vmax=saturation_level, aspect='auto')  # Plot more data on the axes...
+        pyplot.savefig(filename)
+        pyplot.close(f)
+
+    def plot_slice(self, filename=None):
+        print(self.slicefile)
+        if filename==None:
+            filename=self.slicefile
+        f, eye = pyplot.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
+        s = "Node %d - Zero Crossing Slice - %.3fns/%.3fns" % (self.number,
+                self.crossing1_width*1e9, self.crossing2_width*1e9)
+        eye.set_title(s)
+        eye.plot(range(self.nbins), self.zero_crossing_array)  # Plot more data on the axes...
+        pyplot.savefig(filename)
+        pyplot.close(f)
+
+    def _measure_zero_crossing(self):
+        #measure zero crossing widths
+
+        #find the slice that should go the middle of the eye in the y direction
+        zero_crossing_index = int(self.nbits/2)
+
+        #add in the slices above and below to add some noise rejection
+        self.zero_crossing_array = \
+                  self.heatmap[zero_crossing_index + 0 ]\
+                + self.heatmap[zero_crossing_index + 1 ]\
+                + self.heatmap[zero_crossing_index - 1 ]
+
+        #get the indicies of the non-zero elements
+        a = np.nonzero(self.zero_crossing_array)
+
+        #look for large gaps in the indicies
+        #the two largest gaps should represent the eye openings
+        b = np.diff(a[0])
+        i1 = np.argmax(b)
+
+        #invert the first gap measurement so the second can be easily found
+        b[i1] *= -1
+        i2 = np.argmax(b)
+        b[i1] *= -1 #uninvert now that i2 has been found
+
+        #make sure the vairable i1 represents the first eye opening
+        if(i1 > i2):
+            t = i1
+            i1 = i2
+            i2 = t
+
+        #print(a[0])
+        #print(b)
+        #print("i1    %d" % i1)
+        #print("b[i1] %d" % b[i1])
+        #print("i2    %d" % i2)
+        #print("b[i2] %d" % b[i2])
+
+        self.index0 = a[0][i1]+1
+        self.index1 = a[0][i1]+b[i1]-1
+        self.index2 = a[0][i2]+1
+        self.index3 = a[0][i2]+b[i2]-1
+
+        #print("self.index0 : %d" % (self.index0) )
+        #print("self.index1 : %d" % (self.index1) )
+        #print("self.index2 : %d" % (self.index2) )
+        #print("self.index3 : %d" % (self.index3) )
+
+        self.crossing_time     = self.bin_width * (self.index2 + self.index1) / 2
+        self.crossing_time_min = self.bin_width * self.index1
+        self.crossing_time_max = self.bin_width * self.index2
+        self.crossing1_width = self.bin_width * ((self.nbins - self.index3) + self.index0)
+        self.crossing2_width = self.bin_width * (self.index2 - self.index1)
+        #exit(1)
+
 
     def _make_eye(self):
         #generate a centered 2d histogram
@@ -390,75 +496,33 @@ class eye_diagram(object):
                 bin_y = self._digitize(vmax, vmin, self.nbits, s[1])
                 self.heatmap[bin_y][i] += 1
 
-        zero_crossing_index = int(self.nbits/2)
-        self.zero_crossing_array = \
-                  self.heatmap[zero_crossing_index + 0 ]\
-                + self.heatmap[zero_crossing_index + 1 ]\
-                + self.heatmap[zero_crossing_index - 1 ]
-        (self.index0,self.index1) = self._measure_opening_x(int(self.nbins/4))
-        (self.index2,self.index3) = self._measure_opening_x(int(4*self.nbins/5))
+        #determines 4 indicies indicating where the eyes open and close
+        self._measure_zero_crossing()
+        dig_area = self._measure_opening_area(self.index0, self.index1)
+        self.eye_area_1 = dig_area * self.bin_width * ((vmax - vmin) / self.nbits)
+        dig_area = self._measure_opening_area(self.index2, self.index3)
+        self.eye_area_2 = dig_area * self.bin_width * ((vmax - vmin) / self.nbits)
+        print("%.6e %.6e %6.3fnV*s : %6.3fnV*s" % (self.crossing1_width, self.crossing2_width,self.eye_area_1*1e9, self.eye_area_2*1e9))
 
-        self.crossing1_width = self.bin_width * ((self.nbins - self.index3) + self.index0)
-        self.crossing2_width = self.bin_width * (self.index2 - self.index1)
-
-        print("%.6e %.6e %3d %3d %3d %3d" % (self.crossing1_width, self.crossing2_width, self.index0, self.index1, self.index2, self.index3))
-
-        self._measure_opening_area(self.index0, self.index1)
-
-        #    #calculate area under eye openings
-        #    #start by determining the eye opening heights
-        #    (t,p) = np.amin(self.bins_p[index],axis=0)
-        #    (t,m) = np.amax(self.bins_n[index],axis=0)
-        #    self.amp_y.append(p-m)
-        #    tn = self.bin_width*(i+0.5)
-        #    self.amp_x.append(tn)
-
-        #    (t,p) = np.mean(self.bins_p[index],axis=0)
-        #    (t,m) = np.mean(self.bins_n[index],axis=0)
-        #    #self.average_yp.append(p)
-        #    #self.average_yn.append(m)
-
-
-
-        ##start at 1st bin, eye should be closed in this bin
-        ##seek forward through bins and record where the eye opens and closes
-        #o1=0
-        #c1=0
-        #o2=0
-        #c2=0
-        #threshold=0.1
-        #hysteresis=0.025
-        #state=0
-        #th_rise=threshold+hysteresis
-        #th_fall=threshold-hysteresis
-        #for i in range(self.nbins):
-        #    p = self.amp_y[i]
-        #    if(state == 0):
-        #        if p > th_rise:
-        #            state = 1
-        #            o1 = i
-        #    elif(state == 1):
-        #        if p < th_fall:
-        #            state = 2
-        #            c1 = i
-        #    elif(state == 2):
-        #        if p > th_rise:
-        #            state = 3
-        #            o2 = i
-        #    elif(state == 3):
-        #        if p < th_fall:
-        #            state = 4
-        #            c2 = i
-        ##print("O1: %d" % o1)
-        ##print("C1: %d" % c1)
-        ##print("O2: %d" % o2)
-        ##print("C2: %d" % c2)
-        #self.eye_area_0 = 0
-        #self.eye_area_1 = 0
-        #for i in range(o1,c1):
-        #    self.eye_area_0 += self.amp_y[i]*self.bin_width
-        #for i in range(o2,c2):
-        #    self.eye_area_1 += self.amp_y[i]*self.bin_width
+    def getHtmlOutput(self):
+        html = ""
+        html += "<DIV class=content>\n"
+        html += "<DIV class=main>\n"
+        html += "<DIV class=simtitle>\n"
+        html += \
+            "<DIV class=simname><p class=label>%s %s</p></DIV>" \
+            % ("Node", self.number)
+        
+        graphId = "node%d" % (self.number)
+        html += "<p class=text><a onclick=\"toggleItem('%s')\" > show\
+        images</a></p>" % graphId
+        eye_plot = "eye%d.png" % self.number
+        html += "<DIV id='%s' style='display:none'>" % graphId
+        html += "<HR>"
+        html += "<img src=\"img/%s\" alt=\"img/%s\" height=\"500\" width=\"500\"></img>" % (eye_plot, eye_plot)
+        html += "<HR>"
+        html += "</DIV></DIV></DIV></DIV>"
+        return html
 
 
 if __name__ == '__main__':
