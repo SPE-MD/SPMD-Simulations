@@ -407,6 +407,14 @@ if __name__ == '__main__':
     if args.rnode:
         config['noplot']                      = args.noplot
 
+    if not config["htmlTemplates"]: 
+        config["htmlTemplates"] = "htmlTemplates"
+    if not config["headerHtml"]:
+        config["headerHtml"] = "header.html"
+    if not config["tailerHtml"]:
+        config["tailerHtml"] = "tailer.html"
+    if not config["cssFile"]:
+        config["cssFile"] = "promis.css"
     ################################################################################
     #Setup random seed in case this run has random parameters
     ################################################################################
@@ -1026,8 +1034,8 @@ if __name__ == '__main__':
             #print("%02d eye0: %e eye1: %e" % (z+1,eye_data[-1].eye_area_0,eye_data[-1].eye_area_1))
 
         #save the plot as a png file incase another script is making a gif
-        pspec_plot.set_ylabel('DME Output Spectrum')  # Add an y-label to the axes.
-        pspec_plot.plot(dme_signals[-1].fft_freq, 20*np.log10(np.absolute(fft_out_list[-1])),color=color_array[color_index-1])
+        #pspec_plot.set_ylabel('DME Output Spectrum')  # Add an y-label to the axes.
+        #pspec_plot.plot(dme_signals[-1].fft_freq, 20*np.log10(np.absolute(fft_out_list[-1])),color=color_array[color_index-1])
         config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
         plt.savefig(config['plot_png'])
 
