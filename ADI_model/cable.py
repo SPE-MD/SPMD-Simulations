@@ -281,10 +281,10 @@ if __name__ == '__main__':
         zt = []
         wt = []
         mean = np.mean(signal)
-        print(mean)
+        ##print(mean)
         o = np.array(signal,dtype=float) +50*np.array(pulse.sampled_values,dtype=float)
         offset = np.mean(o)
-        print(offset)
+        #print(offset)
         for i in range(0,len(signal)):
             tn = i/81.92e6
             if (tn - t) > lap:

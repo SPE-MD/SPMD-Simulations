@@ -18,6 +18,7 @@ import numpy as np
 #from scipy.signal import butter, lfilter, freqz
 import math
 import matplotlib.pyplot as plt
+from matplotlib.ticker import EngFormatter
 import datetime
 import colorsys
 import json
@@ -43,6 +44,7 @@ from t_connector import T_connector as T_connector
 from dme import dme_wave as dme_wave
 from dme import pulse_wave as pulse_wave
 from dme import eye_diagram 
+from dme import dme_correlator
 
 def _readTxt(infile):
     try :
@@ -60,7 +62,7 @@ def _readTxt(infile):
     inf.close
     return text
 
-def writeHtml(config, eye_data):
+def writeHtml(config, eye_data, min_corr_value):
         header_txt = _readTxt(os.path.join(config['htmlTemplates'],config['headerHtml']))
         tailer_txt = _readTxt(os.path.join(config['htmlTemplates'],config['tailerHtml']))
         css_file = os.path.join(config['htmlTemplates'],config['cssFile'])
@@ -77,14 +79,38 @@ def writeHtml(config, eye_data):
         html += "<body>"
         html += "<DIV class=content>"
         html += "<DIV class=main>"
-        html += "<p class=label>%s</p>" % config['design_md5']
+        html += "<p class=label>%s</p>" % (config['design_md5'])
+        html += "<p class=label>MinCorr=%.3f</p>" % (min_corr_value)
+        html += "<p class=label>Nodes=%d</p>" % (config['nodes'])
+        html += "<p class=label>Length=%.2f</p>" % (config['length'])
         html += "</DIV>"
         html += "</DIV>"
 
-        html += "<HR>"
-        html += "<img src=\"img/%s\" alt=\"img/%s\"></img>" % (config['plot_png_filename'], config['plot_png_filename'])
-        html += "<HR>"
-        html += "<img src=\"img/%s\" alt=\"img/%s\"></img>" % (config['corr_png_filename'], config['corr_png_filename'])
+        html += "<DIV class=content>"
+        html += "<DIV class=main>"
+
+        html += "<a href=\"img/%s\">" %config['eye_gif']
+        html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"800\"></img>" % (config['eye_gif'], config['eye_gif'])
+        html += "</a>"
+        html += "</DIV>"
+        html += "</DIV>"
+
+        html += "<DIV class=content>"
+        html += "<DIV class=main>"
+        html += "<a href=\"img/%s\">" % config['plot_png_filename']
+        html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"800\"></img>" % (config['plot_png_filename'], config['plot_png_filename'])
+        html += "</a>"
+        html += "</DIV>"
+        html += "</DIV>"
+
+        html += "<DIV class=content>"
+        html += "<DIV class=main>"
+        html += "<a href=\"img/%s\">" % config['corr_png_filename']
+        html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"800\"></img>" % (config['corr_png_filename'], config['corr_png_filename'])
+        html += "</a>"
+        html += "</DIV>"
+        html += "</DIV>"
+
         html += "<HR>"
 
         html += "<table align=\"center\">"
@@ -95,7 +121,7 @@ def writeHtml(config, eye_data):
             eye_plot = "eye%d.png" % e.number
             html += "<TD>"
             html += "<a href=\"img/%s\">" % eye_plot
-            html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"300\"></img>" % (eye_plot, eye_plot)
+            html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"200\"></img>" % (eye_plot, eye_plot)
             html += "</a>"
             html += "</TD>"
             n+=1
@@ -166,7 +192,7 @@ if __name__ == '__main__':
     try:
         with open("defaults.json") as json_file:
             config_default = json.load(json_file)
-            print(config_default)
+            #print(config_default)
     except Exception as e:
         print(e)
         print("Issue loading 'defaults.json'")
@@ -341,7 +367,7 @@ if __name__ == '__main__':
         try:
             with open(args.json) as json_file:
                 config = json.load(json_file)
-                print(config)
+                #print(config)
                 #exit(1)
         except Exception as e:
             print(e)
@@ -359,7 +385,7 @@ if __name__ == '__main__':
     #to make sure the config data is complete
     for key in config_default:
         config[key] = config_default[key]
-        print("%s = %s" % (key, config[key]))
+        #print("%s = %s" % (key, config[key]))
 
     #let command line data override any other json data
     if args.nodes:
@@ -407,14 +433,16 @@ if __name__ == '__main__':
     if args.rnode:
         config['noplot']                      = args.noplot
 
-    if not config["htmlTemplates"]: 
+    if not "htmlTemplates" in config: 
         config["htmlTemplates"] = "htmlTemplates"
-    if not config["headerHtml"]:
+    if not "headerHtml" in config:
         config["headerHtml"] = "header.html"
-    if not config["tailerHtml"]:
+    if not "tailerHtml" in config:
         config["tailerHtml"] = "tailer.html"
-    if not config["cssFile"]:
+    if not "cssFile" in config:
         config["cssFile"] = "promis.css"
+    if not "corr_png_filename" in config:
+        config["corr_png_filename"] = "corr.png"
     ################################################################################
     #Setup random seed in case this run has random parameters
     ################################################################################
@@ -542,17 +570,17 @@ if __name__ == '__main__':
         trunk_segments.append(dict(config['default_segment']))
         #make sure segments with a default config get a segment number assigned
         trunk_segments[-1]['segment']=x
-    print(trunk_segments)
+    #print(trunk_segments)
 
     #override default segment description with any segments described specifically in the json files
     for s in config['trunk_description']['segments']:
-        print(s)
+        #print(s)
         index = s['segment']
         for key in s:
-            print(key)
+            #print(key)
             trunk_segments[index][key] = s[key]
 
-    print(trunk_segments)
+    #print(trunk_segments)
     config['trunk_description']['segments'] = trunk_segments
 
     #load cable models from the json files
@@ -660,8 +688,8 @@ if __name__ == '__main__':
     term_end   = Termination(name="end_term", port=mixing_segment[-1].port2, stim_port="end_stim", ccouple=ccouple, rterm=rterm)
     mixing_segment.append(term_end)
 
-    for m in mixing_segment:
-        print(m)
+    #for m in mixing_segment:
+    #    print(m)
 
 
     ################################################################################
@@ -682,7 +710,7 @@ if __name__ == '__main__':
                 , spice_model = config['node_descriptions'][n]['spice_model']
                 )
         nodes.append(node)
-        print(node)
+        #print(node)
 
     ################################################################################
     #Determine which node will be the transmitter for the simulation
@@ -753,14 +781,15 @@ if __name__ == '__main__':
         #path to ground
         zcable.write("vrtn rtn 0 0\n")
 
-        #simulation command
-        Ns = 8192
+        #set up coherant sample parameters for the time domain data
+        bits_to_prime = [[13, 1253],[14,617],[15,313]]
+        Ns = 2**14
         per = 80e-9
-        prime = 1253
+        prime = 313
         Fs = Ns / (prime * per)
-        #print(Fs)
-        #print(".ac lin 4096 %.6g %.6g\n" % ((Fs/2.)/4096,Fs/2.))
-        zcable.write(".ac lin 4096 %.6g %.6g\n" % ((Fs/2.)/4096,Fs/2.))
+        
+        #ac simulation command using coherant sample parameters
+        zcable.write(".ac lin %d %.6g %.6g\n" % ((Ns/2), (Fs/Ns), Fs/2.))
 
         #select nodes to save to speed up the sim and reduce file size
         zcable.write(".save v(*) i(*)\n")
@@ -920,7 +949,9 @@ if __name__ == '__main__':
     rl_limit = return_loss_limit(frequency[0])
     il_limit = insertion_loss_limit(frequency[0])
     rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit")  
+    rl_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
     il_plot.plot(frequency[0], il_limit, label="clause 147 limit")  
+    il_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
     rl_plot.plot(frequency[0], s11_plot[0], label="test", color='k')  
     timeDomainData = []
     for i,p in enumerate(frequency):
@@ -932,16 +963,20 @@ if __name__ == '__main__':
         #timeDomainData.append(timeDomainDataRaw[0:int(len(timeDomainDataRaw)/2)])
         #cm_plot.plot(range(len(timeDomainData[i])), timeDomainData[i], label="time", color=color_array[i])  # Plot more data on the axes...
 
-    rl_plot.set_ylabel('RL (dB)')  # Add an x-label to the axes.
-    rl_plot.set_xlim([0,40e6])
+    rl_plot.set_ylabel('RL (dB)')  
+    nyquist=Fs/2
+    print("nyquist = %.3e" % nyquist)
+    rl_plot.set_xlim([0,nyquist])
     if(config['noautoscale']):
         rl_plot.set_ylim([-70,10])
 
-    il_plot.set_ylabel('Rx/Tx (dB)')  # Add an x-label to the axes.
-    il_plot.set_xlabel('Frequency')  # Add a y-label to the axes.
-    il_plot.set_xlim([0,40.96e6])
-    cm_plot.set_xlim([0,40.96e6])
-    pspec_plot.set_xlim([0,40.96e6])
+    il_plot.set_ylabel('Rx/Tx (dB)') 
+    il_plot.set_xlabel('Frequency') 
+    il_plot.set_xlim(   [0,nyquist])
+    cm_plot.set_xlim(   [0,nyquist])
+    cm_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
+    pspec_plot.set_xlim([0,nyquist])
+    pspec_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
     if(config['noautoscale']):
         il_plot.set_ylim([-20,10])
     rl_plot.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
@@ -950,8 +985,8 @@ if __name__ == '__main__':
         pass
         #network_plot.set_xlim([-1,101])
     network_plot.set_ylim([-1,1])
-    network_plot.set_xlabel('Attach (m)')  # Add a x-label to the axes.
-    network_plot.set_ylabel('Drop (m)')  # Add a x-label to the axes.
+    network_plot.set_xlabel('Attach (m)') 
+    network_plot.set_ylabel('Drop (m)')  
 
     #mixing segment line
     network_plot.plot([0,config['length']],[0,0], color="k")
@@ -984,32 +1019,30 @@ if __name__ == '__main__':
 
 
     ################################################################################
-    # Eye Diagram Generation
+    # Time domain data / Eye Diagram Generation
     ################################################################################
     print("#Generating Random DME Signals")
     dme_signals = []
     #get 5 random data sequences to make the eye diagrams nice and thick
-    for i in range(0,10):
+    for i in range(0,1):
         #TODO: Make dme signal generation dependent on .ac analysis points
-        dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=1253,amplitude=0.010,zin=sparams['zin']))
+        dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=prime,amplitude=0.010,zin=sparams['zin']))
         #dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=1253,amplitude=0.5,zin=None))
-    dme_signals[-1].output_pwl_to_file()
-    dme_signals[-1].output_sampled_pwl_to_file()
-
-    #pspec_plot.plot(dme_signals[-1].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)),color=color_array[color_index-1])
+    
+    if(0): #used to check / debug sampling data externally
+        dme_signals[-1].output_pwl_to_file()
+        dme_signals[-1].output_sampled_pwl_to_file()
 
     #save the plot as a png file incase another script is making a gif
-    #pspec_plot.plot(dme_signals[-1].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)),color=color_array[color_index-1])
-    #config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
-    #plt.savefig(config['plot_png'])
+    pspec_plot.set_ylabel('DME Input Spectrum')  # Add an y-label to the axes.
+    pspec_plot.plot(dme_signals[0].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)),color=color_array[0])
+    config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
+    plt.savefig(config['plot_png'])
 
-    #per node data:
-    #transfer function
-    #tx_psd
-    
     print("#Generating Eye Diagrams")
     eye_data = []
     fft_out_list = []
+    min_corr_value_list = []
     try :
         for z,n in enumerate(nodes):
             #print(n)
@@ -1029,98 +1062,99 @@ if __name__ == '__main__':
                     fft_out_list.append(fft_out)
 
             #pass the list of rx time domain signals to the eye diagram object
-            eye_data.append(eye_diagram(t_domain_sigs, per, 1/Fs,
-                node_number=n.number, imgDir=imgDir))
-            #print("%02d eye0: %e eye1: %e" % (z+1,eye_data[-1].eye_area_0,eye_data[-1].eye_area_1))
+            eye = eye_diagram(t_domain_sigs, dme_signals, per, 1/Fs,
+                node_number=n.number, imgDir=imgDir)
+            min_corr_value_list.append(eye.min_corr_value)
+            eye_data.append(eye)
 
-        #save the plot as a png file incase another script is making a gif
-        #pspec_plot.set_ylabel('DME Output Spectrum')  # Add an y-label to the axes.
-        #pspec_plot.plot(dme_signals[-1].fft_freq, 20*np.log10(np.absolute(fft_out_list[-1])),color=color_array[color_index-1])
-        config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
-        plt.savefig(config['plot_png'])
-
-        #saturation_level is the histogram / heatmap level that makes the heatmap eyediagrams saturate color.
-        #Without this, the eye diagram gets normalized to the largest bin. This makes the sparse data hard to see.
-        #The level is automatically set to 1/2 the zero crossing bin height of the input dme signal
-        #saturation_index = int(eye_data[0].nbins/2)
-        #saturation_level = np.amax(eye_data[0].heatmap[int(eye_data[0].nbits/2)][eye_data[0].index1:eye_data[0].index2])/3
-        saturation_index = 0
-        saturation_level = eye_data[0].zero_crossing_array[0]/3
-        print("Saturation_level (%d): %d" % (saturation_index, saturation_level))
-
-        eye1 = []
-        eye2 = []
-        cross1 = []
-        cross2 = []
-        delay = []
-        cross_time = []
-        cross_time_min  = []
-        cross_time_max  = []
-        for e in eye_data:
-            e.plot_eye(saturation_level=saturation_level) #plot the 2d histogram
-            e.plot_slice() #plot the zero crossing slice from the 2d histogram
-            eye1.append(e.eye_area_1*1e9)
-            eye2.append(e.eye_area_2*1e9)
-            cross1.append(e.crossing1_width*1e9)
-            cross2.append(e.crossing2_width*1e9)
-            delay.append(e.t_offset*1e9)
-            cross_time.append(e.crossing_time*1e9)
-            cross_time_min.append(e.crossing_time_min*1e9)
-            cross_time_max.append(e.crossing_time_max*1e9)
-
-        fig2, eye_plots = plt.subplots(2,2, figsize=(10, 10))  # Create a figure and an axes.
-        fig2.canvas.manager.set_window_title(" ".join(sys.argv))
-        eps = (eye_plots[0][0], eye_plots[0][1],
-               eye_plots[1][0], eye_plots[1][1])
-
-        eps[0].set_xlabel("Attach Point (m)")
-        eps[0].set_ylabel("Eye Opening Area (V*ns)")
-        eps[0].plot(trunk.attach_points, eye1  , 'o', label="eye1")
-        eps[0].plot(trunk.attach_points, eye2  , 'o', label="eye2")
-        eps[0].legend()
-
-        eps[1].set_xlabel("Attach Point (m)")
-        eps[1].set_ylabel("Zero Cross Widths (ns)")
-        eps[1].plot(trunk.attach_points, cross1, 'o')
-        eps[1].plot(trunk.attach_points, cross2, 'o')
-
-        eps[2].set_xlabel("Attach Point (m)")
-        eps[2].set_ylabel("Delay mod 80ns (ns)")
-        eps[2].plot(trunk.attach_points, delay , 'o')
-
-        #eps[3].set_xlabel("Zero Cross Width (s)")
-        #eps[3].set_ylabel("Delay (s)")
-        #eps[3].plot(cross2, delay , 'o')
-
-        eps[3].set_xlabel("Attach Point (m)")
-        eps[3].set_ylabel("Zero Cross Time (ns)")
-
-        eps[3].plot(trunk.attach_points, cross_time_max , '-', label='max')
-        eps[3].plot(trunk.attach_points, cross_time     , '-', label='mean')
-        eps[3].plot(trunk.attach_points, cross_time_min , '-', label='min')
-        eps[3].legend()
-
-        config['corr_png'] = os.path.join("data",design_md5,"img",config['corr_png_filename'])
-        plt.savefig(config['corr_png'])
-
-        loop = []
-        for e in eye_data:
-            loop.append(e.imgfile)
-        for e in reversed(eye_data):
-            loop.append(e.imgfile)
-
-        print("Compiling Gif")
-        import imageio.v2 as imageio
-        images = []
-        gif_file = os.path.join("data",design_md5,"img","eye.gif") 
-        for filename in loop:
-            images.append(imageio.imread(filename))
-        imageio.mimsave(gif_file, images)
-        print("generated gif: %s" % gif_file)
-
+        print("Sampling Period: %.3fns" % (1/Fs*1e9))
     except Exception as e:
         print(e)
         print("issues generating eye diagram")
+
+    #print("%02d eye0: %e eye1: %e" % (z+1,eye_data[-1].eye_area_0,eye_data[-1].eye_area_1))
+    if(0): #optionally save dme ffts from different nodes (right now set to be the last node, but dont trust comments too much!)
+        node_save = -1 #-1 means the last node
+        pspec_plot.set_ylabel('DME Output Spectrum')  # Add an y-label to the axes.
+        pspec_plot.plot(dme_signals[node_save].fft_freq, 20*np.log10(np.absolute(fft_out_list[node_save])),color=color_array[node_save])
+        config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
+        plt.savefig(config['plot_png'])
+
+    #saturation_level is the histogram / heatmap level that makes the heatmap eyediagrams saturate color.
+    #Without this, the eye diagram gets normalized to the largest bin. This makes the sparse data hard to see.
+    #The level is automatically set to 1/2 the zero crossing bin height of the input dme signal
+    #saturation_index = int(eye_data[0].nbins/2)
+    #saturation_level = np.amax(eye_data[0].heatmap[int(eye_data[0].nbits/2)][eye_data[0].index1:eye_data[0].index2])/3
+    saturation_index = 0
+    saturation_level = eye_data[0].zero_crossing_array[0]/3
+    print("Saturation_level (%d): %d" % (saturation_index, saturation_level))
+
+    eye1 = []
+    eye2 = []
+    cross1 = []
+    cross2 = []
+    delay = []
+    cross_time = []
+    cross_time_min  = []
+    cross_time_max  = []
+    for e in eye_data:
+        e.plot_eye(saturation_level=saturation_level) #plot the 2d histogram
+        #e.plot_slice() #plot the zero crossing slice from the 2d histogram
+        eye1.append(e.eye_area_1*1e9)
+        eye2.append(e.eye_area_2*1e9)
+        cross1.append(e.crossing1_width*1e9)
+        cross2.append(e.crossing2_width*1e9)
+        delay.append(e.t_offset*1e9)
+        cross_time.append(e.crossing_time*1e9)
+        cross_time_min.append(e.crossing_time_min*1e9)
+        cross_time_max.append(e.crossing_time_max*1e9)
+
+    fig2, eye_plots = plt.subplots(2,2, figsize=(10, 10))  # Create a figure and an axes.
+    fig2.canvas.manager.set_window_title(" ".join(sys.argv))
+    eps = (eye_plots[0][0], eye_plots[0][1],
+           eye_plots[1][0], eye_plots[1][1])
+
+    eps[0].set_xlabel("Attach Point (m)")
+    eps[0].set_ylabel("Eye Opening Area (V*ns)")
+    eps[0].plot(trunk.attach_points, eye1  , 'o', label="eye1")
+    eps[0].plot(trunk.attach_points, eye2  , 'o', label="eye2")
+    eps[0].legend()
+
+    eps[1].set_xlabel("Attach Point (m)")
+    eps[1].set_ylabel("Zero Cross Widths (ns)")
+    eps[1].plot(trunk.attach_points, cross1, 'o')
+    eps[1].plot(trunk.attach_points, cross2, 'o')
+
+    eps[2].set_xlabel("Attach Point (m)")
+    eps[2].set_ylabel("Min Correlation Value")
+    eps[2].set_ylim([0,1])
+    eps[2].plot(trunk.attach_points, min_corr_value_list , 'o')
+    eps[2].plot([trunk.attach_points[0],trunk.attach_points[-1]], [0.55,0.55] , '-')
+
+    eps[3].set_xlabel("Attach Point (m)")
+    eps[3].set_ylabel("Zero Cross Time (ns)")
+    eps[3].plot(trunk.attach_points, cross_time_max , 'o', label='max')
+    eps[3].plot(trunk.attach_points, cross_time     , 'o', label='mean')
+    eps[3].plot(trunk.attach_points, cross_time_min , 'o', label='min')
+    eps[3].legend()
+
+    config['corr_png'] = os.path.join("data",design_md5,"img",config['corr_png_filename'])
+    plt.savefig(config['corr_png'])
+
+    loop = []
+    for e in eye_data:
+        loop.append(e.imgfile)
+    for e in reversed(eye_data):
+        loop.append(e.imgfile)
+
+    print("Compiling Gif")
+    import imageio.v2 as imageio
+    images = []
+    config['eye_gif'] = 'eye.gif'
+    gif_file = os.path.join("data",design_md5,"img",config['eye_gif'])
+    for filename in loop:
+        images.append(imageio.imread(filename))
+    imageio.mimsave(gif_file, images)
 
     ################################################################################
     # End Eye Diagram Generation
@@ -1130,7 +1164,7 @@ if __name__ == '__main__':
     # Generate HTML output
     ################################################################################
     print("Generating .html report")
-    writeHtml(config, eye_data)
+    writeHtml(config, eye_data, np.amin(min_corr_value_list))
     ################################################################################
     # End Eye Diagram Generation
     ################################################################################

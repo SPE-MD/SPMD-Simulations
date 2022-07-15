@@ -200,9 +200,9 @@ class dme_wave(object):
         self.tstop=ts*ns 
         self.n_symbols=n_symbols
 
-        pattern = np.random.randint(2,size=self.n_symbols)
-        pattern[0]=1
-        pattern[-1]=0
+        self.pattern = np.random.randint(2,size=self.n_symbols)
+        self.pattern[0]=1
+        self.pattern[-1]=0
         tstart = 0
         self.amp=amplitude
         self.trise=10e-9
@@ -210,7 +210,7 @@ class dme_wave(object):
         self.pwl = ["0 %.3f" % self.amp]
         t0 = tstart
         tflat = (self.per-(4*self.trise))/2
-        for i in pattern:
+        for i in self.pattern:
             x = i * self.amp * 2
             self.pwl.append("%.12f %.2f" % (t0 +  self.trise           , x-self.amp))
             self.pwl.append("%.12f %.2f" % (t0 + (self.trise+tflat)    , x-self.amp))
@@ -220,11 +220,10 @@ class dme_wave(object):
                 -self.amp+(2*self.amp*(1-i))))
             #print("%d %s %s %s %s" % (i, self.pwl[-4], self.pwl[-3], self.pwl[-2], self.pwl[-1]))
             t0 += self.per
-        #self.pwl.append("%.12f %.2f" % (self.per*len(pattern), -self.amp+(2*self.amp*(1-i))))
+        #self.pwl.append("%.12f %.2f" % (self.per*len(self.pattern), -self.amp+(2*self.amp*(1-i))))
         self.pwl_wave = pwlWave()
         self.pwl_wave.buildPwlFromText(self.pwl)
 
-        #print(amplitude)
 
 
         self._sample_dme()
@@ -298,18 +297,101 @@ class dme_wave(object):
         #        fft.write("{:.12f} {:.12g}\n".format(fft_freq[i], fft_value[i]))
 
 
+#compare a dme wave, symbol by symbol, to an ideal symbol to recover data
+#
+class dme_correlator(object):
+    def __init__(self, dme_signal, ts, delay=0, dme_input=None):
+        #make an ideal symbol for correlation of received signals
+        self.corr_pwl =     ["0.0 1.0"]
+        self.corr_pwl.append("39.999e-9 1")
+        self.corr_pwl.append("40.001e-9  -1")
+        self.corr_pwl.append("80e-9      -1")
+        self.corr_wave = pwlWave()
+        self.corr_wave.buildPwlFromText(self.corr_pwl)
+
+        period_last = -1000
+        csum=0
+        ccount=-1
+        corr_avg = []
+        corr_count = []
+        recovered = []
+        with open("dme_wave.txt", 'w') as dme:
+            #print(delay)
+            length = len(dme_signal)
+            stop   = length
+            index=0
+            while(index<stop):
+                i=index%length
+                x=dme_signal[i]
+                sl = -1
+                if x > 0:
+                    sl = 1
+                time=(index*ts)
+                offset_time = (time-delay-40e-9)
+                period = math.floor((time-delay-40e-9)/80e-9)
+                #align the 'perfect' correlator signal with the recovered data
+                #subtracting delay here makes the clock transitions line up on
+                # the 80ns marks
+                c = self.corr_wave.pwlTimes(time-delay-40e-9)
+                corr_meas = abs(sl-c)
+                if(period != period_last and ccount>0):
+                    corr_ratio = (csum/ccount) - 1.0
+                    corr_avg.append(abs(corr_ratio))
+
+                    rec = -1
+                    if(corr_ratio > 0.55):
+                        rec=1
+                    elif(corr_ratio < -0.55):
+                        rec=0
+
+                    #this section ignores partial bits at the beginning
+                    #by detecting if there were too few samples for the period
+                    #to have changed
+                    #if there is a partial bit increas the 'stop' threshold by
+                    #parital count and the partial bit will be picked up as part
+                    #of the last bit
+                    if(ccount>math.floor(80e-9/ts)):
+                        recovered.append(rec)
+                        corr_count.append(ccount)
+                    else:
+                        stop+=ccount
+                    period_last = period
+                    csum=0
+                    ccount=0
+                csum+=corr_meas
+                ccount+=1
+                #output some data for verification / debugging
+                dme.write("% .12f % .12f % .12f % .12f % d % d % d % d % .12f\n" % (time, x,
+                        time, dme_input.sampled_values[i],sl,c,period,
+                        corr_meas, offset_time ))
+
+                index+=1
+
+        for i in range(len(recovered)):
+        #for i in range(len(recovered)-10,len(recovered)):
+        #for i in range(0,10):
+            if(corr_avg[i] < 0.7):
+                print("%04d %5.3f %d %d %d" %
+                    (i,corr_avg[i],dme_input.pattern[i],recovered[i],corr_count[i]))
+
+        #print("delay = %e" % delay)
+        #print("min=%e" % np.amin(corr_avg))
+        self.min_corr_value = np.amin(corr_avg)
+
 #generate eye diagrams from a 1d (y points only) array where data was sampled with
 #the specified sample rate and the data bit(s) have the specified sample period
 #t_domain_sigs is a list of time domain signals.  Each one will be added to the eye diagram
 class eye_diagram(object):
     def __init__(self,
             t_domain_sigs,
+            dme_signals,
             symbol_period=80e-9,
-            sample_rate=1/81.92e6,
+            sample_period=1/81.92e6,
             node_number=0,
             imgDir="."):
+            
         self.symbol_period=symbol_period
-        self.sample_rate=sample_rate
+        self.sample_period=sample_period
         self.t_domain_sigs = t_domain_sigs
         self.number = node_number
         self.imgDir = imgDir
@@ -333,6 +415,15 @@ class eye_diagram(object):
         self.eye_area_1 = 1 
         self._make_eye()
 
+        min_corr_value_list=[]
+        for i in range(0,len(t_domain_sigs)):
+            dc = dme_correlator(t_domain_sigs[i], sample_period, self.t_offset, dme_signals[i])
+            min_corr_value_list.append(dc.min_corr_value)
+        self.min_corr_value = np.amin(min_corr_value_list)
+        print("%2d %.6e %.6e %6.3fnV*s : %6.3fnV*s %5.3f" % (self.number, self.crossing1_width,
+            self.crossing2_width,self.eye_area_1*1e9, self.eye_area_2*1e9,
+            self.min_corr_value))
+
     #wrap the signal around an 80ns period (time % 80ns)
     #chop period into 0.5ns bins
     #place samples in the bins
@@ -344,7 +435,7 @@ class eye_diagram(object):
             t=0
             #make histogram of time domain signal wrapped around (modulo) symbol_period
             for i in range(0,len(sig)):
-                tn = i * self.sample_rate
+                tn = i * self.sample_period
                 if (tn - t) > self.symbol_period:
                    t+=self.symbol_period
                 b = int((tn-t)/self.bin_width) 
@@ -502,7 +593,6 @@ class eye_diagram(object):
         self.eye_area_1 = dig_area * self.bin_width * ((vmax - vmin) / self.nbits)
         dig_area = self._measure_opening_area(self.index2, self.index3)
         self.eye_area_2 = dig_area * self.bin_width * ((vmax - vmin) / self.nbits)
-        print("%.6e %.6e %6.3fnV*s : %6.3fnV*s" % (self.crossing1_width, self.crossing2_width,self.eye_area_1*1e9, self.eye_area_2*1e9))
 
     def getHtmlOutput(self):
         html = ""
