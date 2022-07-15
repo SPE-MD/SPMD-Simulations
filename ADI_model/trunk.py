@@ -153,7 +153,7 @@ class Trunk(object):
             self.attach_points = start + mid + end
         else:
             self.attach_points = attach_points
-        print(self.attach_points)
+        #print(self.attach_points)
 
     def distribute_pds_random(self, attach_start, attach_end, nodes, separation_min):
         #remove start and end pads from the total length before 
@@ -219,7 +219,7 @@ class Trunk(object):
             t=Cable(cable_model,name="trunk0",length=self.attach_points[0],port1="t0a",port2="t0b",Zo=Zo,spice_model=spice_model,max_seg_length=self.max_seg_length)
             trunk_segments.append(t)
 
-        print(len(self.attach_points))
+        #print(len(self.attach_points))
         for l in range(1,len(self.attach_points)):
             cable_model = cable_models[segment_data[l]['model']]
             spice_model = segment_data[l]['spice_model']
