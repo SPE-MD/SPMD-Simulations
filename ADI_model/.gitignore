@@ -6,6 +6,7 @@ cable.p
 *.plot
 *.gif
 makegif_*/
+last_run.json
 
 
 #LT Spice Specific Ignores
