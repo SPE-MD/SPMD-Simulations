@@ -740,7 +740,6 @@ if __name__ == '__main__':
         % (config['segments_per_meter'], config['length']))
         cable.write("*and a %f meter long cable\n" % config['length'])
 
-
         for m in mixing_segment:
             cable.write(m.subcircuit()+"\n")
         for n in nodes:
@@ -1025,13 +1024,21 @@ if __name__ == '__main__':
     dme_signals = []
     #get 5 random data sequences to make the eye diagrams nice and thick
     for i in range(0,1):
-        #TODO: Make dme signal generation dependent on .ac analysis points
         dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=prime,amplitude=0.010,zin=sparams['zin']))
         #dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=1253,amplitude=0.5,zin=None))
     
+
     if(0): #used to check / debug sampling data externally
         dme_signals[-1].output_pwl_to_file()
         dme_signals[-1].output_sampled_pwl_to_file()
+
+    #Apply rx filter here.  This is a bit early, should probably allow
+    #different filters at different nodes eventually
+    if(1): #verify filter shapes
+        for ds in dme_signals:
+            ds._hpf_dme(500e3,1)
+            ds._lpf_dme(15e6,1)
+            ds._lpf_dme(30e6,1)
 
     #save the plot as a png file incase another script is making a gif
     pspec_plot.set_ylabel('DME Input Spectrum')  # Add an y-label to the axes.
@@ -1052,8 +1059,9 @@ if __name__ == '__main__':
             for dme in dme_signals:
                 if n != tx_node or True:
                     #multiply transmit fft by transfer function to node of interest
+
                     fft_out = rf.fft_transfer(
-                            dme.fft_value,
+                            dme.fft_value * dme.tx_filter,
                             tx_node.phy_port_voltage(),
                             n.phy_port_voltage())
 

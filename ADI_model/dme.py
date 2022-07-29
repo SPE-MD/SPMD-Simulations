@@ -201,6 +201,7 @@ class dme_wave(object):
         self.n_symbols=n_symbols
 
         self.pattern = np.random.randint(2,size=self.n_symbols)
+        self.tx_filter = np.ones(shape=int(ns/2)+1,dtype=complex)
         self.pattern[0]=1
         self.pattern[-1]=0
         tstart = 0
@@ -224,13 +225,11 @@ class dme_wave(object):
         self.pwl_wave = pwlWave()
         self.pwl_wave.buildPwlFromText(self.pwl)
 
-
-
         self._sample_dme()
         self._fft_dme()
         cutoff = 20e6
         order = 1
-        self._lpf_dme(cutoff, order)
+        #self._lpf_dme(cutoff, order)
 
         if(zin):
             for i,f in enumerate(self.fft_freq):
@@ -255,14 +254,59 @@ class dme_wave(object):
                 out.write("%.12f %.12f\n" % 
                         (self.sampled_times[i], self.sampled_values[i]))
 
-    def _lpf_dme(self, cutoff, order):
-        RC = cutoff / (2*math.pi)
+    def _butterworth_poles(self, cutoff, order):
+        Wcutoff = (2*math.pi*cutoff)
+        poles = []
+        for k in range(1,order+1):
+            poles.append(Wcutoff * np.exp(complex(0,((2*k)+order-1)*np.pi)/(2*order)))
+        return poles
+
+    def _hpf_dme(self, cutoff, order):
+        print("HPF Filter Order %d" % (order))
+        Wcutoff = (2*math.pi*cutoff)
         if(order < 1):
             return
 
-        for i,f in enumerate(self.fft_freq):
-            h = 1 / ((complex(0,(f/(2*math.pi)))/RC)**order + 1)
-            self.fft_value[i] = h * self.fft_value[i]
+        poles = self._butterworth_poles(cutoff, order)
+        
+        for i,freq in enumerate(self.fft_freq):
+            if(freq == 0):
+                self.tx_filter[i] = np.nan
+            else:
+                w = freq * (2*math.pi)
+                h=1
+                for p in poles:
+                    #h *= 1 / (complex(0,w) - complex(0,p.imag))
+                    h *= complex(0,w)/(complex(0,w) + p)
+                self.tx_filter[i] = h * self.tx_filter[i]
+
+        #self.fft_value *= self.tx_filter
+
+    def _lpf_dme(self, cutoff, order):
+        #self.tx_filter = np.ones(shape=int(self.ns/2)+1,dtype=complex)
+        Wcutoff = (2*math.pi*cutoff)
+        poles = self._butterworth_poles(cutoff, order)
+        if(order < 1):
+            return
+        print("LPF")
+        for i,freq in enumerate(self.fft_freq):
+                w = freq * (2*math.pi)
+                h=1
+                for p in poles:
+                    h *= Wcutoff / (complex(0,w) - p)
+                self.tx_filter[i] = h * self.tx_filter[i]
+        #self.fft_value *= self.tx_filter
+
+
+    def output_filter_to_file(self, filename="filter.txt"):
+        with open(filename, 'w') as out:
+            for i in range(0,len(self.fft_freq)):
+                out.write("%.12e %.12e %.12e\n" % 
+                        (self.fft_freq[i],
+                            20*math.log10(np.abs(self.tx_filter[i])),
+                            np.angle(self.tx_filter[i])
+                            )
+                        )
 
     def _sample_dme(self):
         self.sampled_times  = []
@@ -347,7 +391,7 @@ class dme_correlator(object):
                     #this section ignores partial bits at the beginning
                     #by detecting if there were too few samples for the period
                     #to have changed
-                    #if there is a partial bit increas the 'stop' threshold by
+                    #if there is a partial bit increase the 'stop' threshold by
                     #parital count and the partial bit will be picked up as part
                     #of the last bit
                     if(ccount>math.floor(80e-9/ts)):
