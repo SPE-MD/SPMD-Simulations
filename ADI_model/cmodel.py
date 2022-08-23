@@ -41,10 +41,9 @@ from termination import Termination as Termination
 from transmitter import Transmitter as Transmitter
 from trunk import Trunk as Trunk
 from t_connector import T_connector as T_connector
-from dme import dme_wave as dme_wave
-from dme import pulse_wave as pulse_wave
+from dme import dme_transmitter as dme_transmitter
 from dme import eye_diagram 
-from dme import dme_correlator
+from dme import dme_receiver
 
 def _readTxt(infile):
     try :
@@ -89,9 +88,20 @@ def writeHtml(config, eye_data, min_corr_value):
         html += "<DIV class=content>"
         html += "<DIV class=main>"
 
-        html += "<a href=\"img/%s\">" %config['eye_gif']
-        html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"800\"></img>" % (config['eye_gif'], config['eye_gif'])
+        html += "<p class=label>%s</p>" % ("Eye @ MDI")
+        html += "<a href=\"img/%s\">" %config['eye_gif_mdi']
+        html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"800\"></img>" % (config['eye_gif_mdi'], config['eye_gif_mdi'])
         html += "</a>"
+        html += "</DIV>"
+        html += "</DIV>"
+
+        html += "<DIV class=content>"
+        html += "<DIV class=main>"
+        html += "<p class=label>%s</p>" % ("Eye after filter")
+        html += "<a href=\"img/%s\">" %config['eye_gif_filtered']
+        html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"800\"></img>" % (config['eye_gif_filtered'], config['eye_gif_filtered'])
+        html += "</a>"
+
         html += "</DIV>"
         html += "</DIV>"
 
@@ -118,7 +128,7 @@ def writeHtml(config, eye_data, min_corr_value):
         n=0
         for e in eye_data:
             #html += e.getHtmlOutput()
-            eye_plot = "eye%d.png" % e.number
+            eye_plot = "%s%d.png" % (e.filename, e.node_number)
             html += "<TD>"
             html += "<a href=\"img/%s\">" % eye_plot
             html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"200\"></img>" % (eye_plot, eye_plot)
@@ -873,7 +883,6 @@ if __name__ == '__main__':
     #containers to hold output data for plotting
     fig, (rl_plot, il_plot, cm_plot, pspec_plot, network_plot) = plt.subplots(5,1, figsize=(9, 10))  # Create a figure and an axes.
 
-    
     #set the simulation command as the window title.
     fig.canvas.manager.set_window_title(" ".join(sys.argv))
 
@@ -913,8 +922,9 @@ if __name__ == '__main__':
     ################################################################################
     #Write the csv file
     ################################################################################
-    with open(csvFile, 'w') as csv:
-        csv.write(mpUtil.aoa2csv(mpUtil.transpose(csv_aoa)))
+    if(0):
+        with open(csvFile, 'w') as csv:
+            csv.write(mpUtil.aoa2csv(mpUtil.transpose(csv_aoa)))
 
     ################################################################################
     #Plot the data
@@ -945,40 +955,38 @@ if __name__ == '__main__':
         (red,green,blue) = colorsys.hsv_to_rgb(color_step,1,1)
         color_array.append('#%02X%02X%02X' % (int(red*255), int(green*255), int(blue*255)))  
 
+    nyquist=Fs/2
+    print("nyquist = %.3e" % nyquist)
+    xmax=nyquist
+    xmax=40e6
+
     rl_limit = return_loss_limit(frequency[0])
     il_limit = insertion_loss_limit(frequency[0])
-    rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit")  
-    rl_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
+
     il_plot.plot(frequency[0], il_limit, label="clause 147 limit")  
     il_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
-    rl_plot.plot(frequency[0], s11_plot[0], label="test", color='k')  
-    timeDomainData = []
     for i,p in enumerate(frequency):
         il_plot.plot(frequency[i], s21_plot[i], label="test", color=color_array[i])  
         cm_plot.plot(frequency[i], dm_cm_plot[i], label="test", color=color_array[i])  
-        #rl_plot.plot(frequency[i], s11_plot[i])  
-        #il_plot.plot(frequency[i], s21_plot[i])  
-        #timeDomainDataRaw = frequency_dom_to_time_dom(s21_plot[i])
-        #timeDomainData.append(timeDomainDataRaw[0:int(len(timeDomainDataRaw)/2)])
-        #cm_plot.plot(range(len(timeDomainData[i])), timeDomainData[i], label="time", color=color_array[i])  # Plot more data on the axes...
 
+    rl_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
+    rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit")  
+    rl_plot.plot(frequency[0], s11_plot[0], label="test", color='k')  
     rl_plot.set_ylabel('RL (dB)')  
-    nyquist=Fs/2
-    print("nyquist = %.3e" % nyquist)
-    rl_plot.set_xlim([0,nyquist])
+    rl_plot.set_xlim([0,xmax])
+    rl_plot.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
     if(config['noautoscale']):
         rl_plot.set_ylim([-70,10])
 
     il_plot.set_ylabel('Rx/Tx (dB)') 
     il_plot.set_xlabel('Frequency') 
-    il_plot.set_xlim(   [0,nyquist])
-    cm_plot.set_xlim(   [0,nyquist])
+    il_plot.set_xlim(   [0,xmax])
+    cm_plot.set_xlim(   [0,xmax])
     cm_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
-    pspec_plot.set_xlim([0,nyquist])
+    pspec_plot.set_xlim([0,xmax])
     pspec_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
     if(config['noautoscale']):
         il_plot.set_ylim([-20,10])
-    rl_plot.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
 
     if(config['noautoscale']):
         pass
@@ -1020,71 +1028,81 @@ if __name__ == '__main__':
     ################################################################################
     # Time domain data / Eye Diagram Generation
     ################################################################################
-    print("#Generating Random DME Signals")
-    dme_signals = []
-    #get 5 random data sequences to make the eye diagrams nice and thick
-    for i in range(0,1):
-        dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=prime,amplitude=0.010,zin=sparams['zin']))
-        #dme_signals.append(dme_wave(ts=1/Fs,ns=Ns,n_symbols=1253,amplitude=0.5,zin=None))
+    print("#Generating Random DME Signal")
+    dme_tx = dme_transmitter(ts=1/Fs,ns=Ns,symbol_period=80e-9,n_symbols=prime,amplitude=0.010,zin=sparams['zin'])
+    #dme_tx.add_filter("lpf",20e6,5)
     
+    if(0):
+        config['tx_filter_png'] = os.path.join("data",design_md5,"img",'tx_filter.png') 
+        dme_tx.plot_filter(config['tx_filter_png'],title="tx_filter")
 
     if(0): #used to check / debug sampling data externally
-        dme_signals[-1].output_pwl_to_file()
-        dme_signals[-1].output_sampled_pwl_to_file()
-
-    #Apply rx filter here.  This is a bit early, should probably allow
-    #different filters at different nodes eventually
-    if(1): #verify filter shapes
-        for ds in dme_signals:
-            ds._hpf_dme(500e3,1)
-            ds._lpf_dme(15e6,1)
-            ds._lpf_dme(30e6,1)
+        #dme_tx.output_pwl_to_file()
+        #dme_tx.output_sampled_pwl_to_file()
+        dme_tx.t_domain_filtered = np.fft.irfft(dme_tx.get_filtered_fft())
+        dme_tx.output_t_domain_to_file()
+        exit(1)
 
     #save the plot as a png file incase another script is making a gif
     pspec_plot.set_ylabel('DME Input Spectrum')  # Add an y-label to the axes.
-    pspec_plot.plot(dme_signals[0].fft_freq, 20*np.log10(np.absolute(dme_signals[0].fft_value)),color=color_array[0])
+    pspec_plot.plot(dme_tx.fft_freq,
+            20*np.log10(np.absolute(dme_tx.get_filtered_fft())),color=color_array[0])
+    pspec_plot.plot(dme_tx.fft_freq,
+            20*np.log10(np.absolute(dme_tx.fft_value)),color=color_array[1])
     config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
     plt.savefig(config['plot_png'])
 
     print("#Generating Eye Diagrams")
-    eye_data = []
-    fft_out_list = []
+    eye_data_mdi = []
+    eye_data_filtered = []
     min_corr_value_list = []
-    try :
-        for z,n in enumerate(nodes):
-            #print(n)
-            t_domain_sigs = []
+    receivers = []
+    #try :
+    for z,n in enumerate(nodes):
+        #multiply transmit fft by transfer function to node of interest
+        fft_out = rf.fft_transfer(
+                dme_tx.get_filtered_fft(),
+                tx_node.phy_port_voltage(),
+                n.phy_port_voltage())
 
-            #use many dme signal ffts to thicken the eye diagrams
-            for dme in dme_signals:
-                if n != tx_node or True:
-                    #multiply transmit fft by transfer function to node of interest
+        rx = dme_receiver(n, dme_tx, imgDir)
+        receivers.append(rx)
 
-                    fft_out = rf.fft_transfer(
-                            dme.fft_value * dme.tx_filter,
-                            tx_node.phy_port_voltage(),
-                            n.phy_port_voltage())
+        #rx.add_filter("hpf",500e3,1)
+        #rx.add_filter("lpf",15e6,1)
+        #rx.add_filter("lpf",30e6,1)
+        rx.rx_fft(fft_out)
+        rx.output_filter_to_file()
+        rx.output_t_domain_to_file()
 
-                    #invert fft to recover time domain signal
-                    t_domain_sigs.append(np.fft.irfft(fft_out))
-                    fft_out_list.append(fft_out)
+        #insert new rx object here...
+        #run correlations 
+        #hold eye data - show more than one eye (one for MDI eye
+        #diagram, one for rxfilter eye, another for correlated eye
 
-            #pass the list of rx time domain signals to the eye diagram object
-            eye = eye_diagram(t_domain_sigs, dme_signals, per, 1/Fs,
-                node_number=n.number, imgDir=imgDir)
-            min_corr_value_list.append(eye.min_corr_value)
-            eye_data.append(eye)
+        ################################################################################
+        #these two functions overwrite some object variables that the other one sets
+        #like min_corr_value.  
+        #right now the order matters, maybe fix this in the future
+        #rx.process_mdi_data()
+        rx.process_filtered_data()
+        ################################################################################
 
-        print("Sampling Period: %.3fns" % (1/Fs*1e9))
-    except Exception as e:
-        print(e)
-        print("issues generating eye diagram")
+        min_corr_value_list.append(rx.min_corr_value)
+        #eye_data_mdi.append(rx.eye_mdi)
+        eye_data_filtered.append(rx.eye_filtered)
+        rx_filter_png = os.path.join("data",design_md5,"img","rx_filter_%d.png" % rx.node.number) 
+        rx.plot_filter(rx_filter_png,title="rx_filter - Node %d" % rx.node.number)
 
-    #print("%02d eye0: %e eye1: %e" % (z+1,eye_data[-1].eye_area_0,eye_data[-1].eye_area_1))
+    print("Sampling Period: %.3fns" % (1/Fs*1e9))
+    #except Exception as e:
+    #    print(e)
+    #    print("issues generating eye diagram")
+
     if(0): #optionally save dme ffts from different nodes (right now set to be the last node, but dont trust comments too much!)
         node_save = -1 #-1 means the last node
         pspec_plot.set_ylabel('DME Output Spectrum')  # Add an y-label to the axes.
-        pspec_plot.plot(dme_signals[node_save].fft_freq, 20*np.log10(np.absolute(fft_out_list[node_save])),color=color_array[node_save])
+        pspec_plot.plot(dme_tx.fft_freq, 20*np.log10(np.absolute(fft_out_list[node_save])),color=color_array[node_save])
         config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
         plt.savefig(config['plot_png'])
 
@@ -1094,7 +1112,7 @@ if __name__ == '__main__':
     #saturation_index = int(eye_data[0].nbins/2)
     #saturation_level = np.amax(eye_data[0].heatmap[int(eye_data[0].nbits/2)][eye_data[0].index1:eye_data[0].index2])/3
     saturation_index = 0
-    saturation_level = eye_data[0].zero_crossing_array[0]/3
+    saturation_level = eye_data_filtered[0].zero_crossing_array[0]/3
     print("Saturation_level (%d): %d" % (saturation_index, saturation_level))
 
     eye1 = []
@@ -1105,7 +1123,10 @@ if __name__ == '__main__':
     cross_time = []
     cross_time_min  = []
     cross_time_max  = []
-    for e in eye_data:
+
+    #for e in eye_data_mdi:
+    #    e.plot_eye(saturation_level=saturation_level) #plot the 2d histogram
+    for e in eye_data_filtered:
         e.plot_eye(saturation_level=saturation_level) #plot the 2d histogram
         #e.plot_slice() #plot the zero crossing slice from the 2d histogram
         eye1.append(e.eye_area_1*1e9)
@@ -1149,20 +1170,35 @@ if __name__ == '__main__':
     config['corr_png'] = os.path.join("data",design_md5,"img",config['corr_png_filename'])
     plt.savefig(config['corr_png'])
 
-    loop = []
-    for e in eye_data:
-        loop.append(e.imgfile)
-    for e in reversed(eye_data):
-        loop.append(e.imgfile)
-
     print("Compiling Gif")
     import imageio.v2 as imageio
+    config['eye_gif_mdi'] = 'eye_mdi.gif'
+    if(0):
+        loop = []
+        for e in eye_data_mdi:
+            loop.append(e.imgfile)
+        for e in reversed(eye_data_mdi):
+            loop.append(e.imgfile)
+
+        images = []
+        gif_file = os.path.join("data",design_md5,"img",config['eye_gif_mdi'])
+        for filename in loop:
+            images.append(imageio.imread(filename))
+        imageio.mimsave(gif_file, images)
+
+    loop = []
+    for e in eye_data_filtered:
+        loop.append(e.imgfile)
+    for e in reversed(eye_data_filtered):
+        loop.append(e.imgfile)
+
     images = []
-    config['eye_gif'] = 'eye.gif'
-    gif_file = os.path.join("data",design_md5,"img",config['eye_gif'])
+    config['eye_gif_filtered'] = 'eye_filtered.gif'
+    gif_file = os.path.join("data",design_md5,"img",config['eye_gif_filtered'])
     for filename in loop:
         images.append(imageio.imread(filename))
     imageio.mimsave(gif_file, images)
+
 
     ################################################################################
     # End Eye Diagram Generation
@@ -1172,59 +1208,28 @@ if __name__ == '__main__':
     # Generate HTML output
     ################################################################################
     print("Generating .html report")
-    writeHtml(config, eye_data, np.amin(min_corr_value_list))
+    writeHtml(config, eye_data_filtered, np.amin(min_corr_value_list))
     ################################################################################
     # End Eye Diagram Generation
     ################################################################################
-
-
-    ################################################################################
-    #Time Domain Reflectometer Output
-    #  this is an experiment to make a TDR, but it doesn't work well because it relies on fourier transforms
-    #  that leads to weird results because fourier is an infinite repeating series so
-    #  the results end up with non-causal (from the point of view of a step response) artifacts
-    #  TDR is more of a lapace transform kind of thing I think, so a different approach is needed
-    ################################################################################
-    if(0):
-        try :
-            #generate a coherantly sampled test pulse
-            pulse = pulse_wave(prime=83)
-
-            #generate graph for pulse response
-            fft_out = rf.fft_zin(
-                    pulse.fft_value,
-                    tx_node.phy_port_voltage(),
-                    transmitter.transmitter_current()
-                    )
-
-            signal = np.fft.irfft(fft_out)
-            t=0 #used to adjust the eye placement
-            lap=pulse.tper
-
-            xt = []
-            yt = []
-            for i in range(0,len(signal)):
-                tn = i/81.92e6
-                if (tn - t) > lap:
-                   t+=lap
-                   #add a NaN to the data to prevent lines being drawn from end to beginning time on the eye
-                   xt.append(float('NaN'))
-                   yt.append(float('NaN'))
-                   #print("")
-                #print("%.12f %.12f" % (tn-t, signal[i]))
-                yt.append(abs(signal[i]))
-                xt.append(tn-t)
-            cm_plot.set_xlim([-20e-9,20e-9+(pulse.tper)])
-            cm_plot.set_ylim([40,60])
-            cm_plot.grid(b=True)
-            cm_plot.scatter(xt, yt, s=1, color=color_array[0])  # Plot more data on the axes...
-
-
-        except Exception as e:
-            print(e)
-            print("issues generating pulse response")
 
     if not config['noplot']:
         #print("#Close plot window to continue")
         #plt.show()
         plt.close()
+
+    fig, rl_plot = plt.subplots(1,1, figsize=(9, 2))  # Create a figure and an axes.
+    rl_limit = return_loss_limit(frequency[0])
+    il_limit = insertion_loss_limit(frequency[0])
+    rl_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
+    rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit")  
+    rl_plot.plot(frequency[0], s11_plot[0], label="test", color='k')  
+    rl_plot.set_ylabel('RL (dB)')  
+    rl_plot.set_xlim([0,xmax])
+    rl_plot.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
+    if(config['noautoscale']):
+        rl_plot.set_ylim([-70,10])
+
+    plt.savefig('rl_plot.png')
+    plt.close(fig)
+

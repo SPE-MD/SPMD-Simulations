@@ -121,127 +121,219 @@ class pwlWave(object):
         print("Should not have gotten here!!!!")
         return p[-1][1]
 
-#set up a pulse train that can be used to measure pulse response
-#need a repeating (prime number) set of pulses that are coherantly sampled
-#across the sample period
-#ts * ns / Prime = Tpulse
-#Tpulse should be long so that reflections die out before the next transition
-#Tpulse should also be short so that the coherant sample gets as many amplitudes 
-#and phases as possible
-class pulse_wave(object):
-    def __init__(self,ts=1/81.92e6,ns=8192, prime=13, duty_cycle=0.5, trise=10e-9):
-        self.ts = ts #1/81.92e6
+class analog_filter_s_domain(object):
+    #filter_type is 'hpf' or 'lpf', add butterworth, chebychev, etc later...
+    def __init__(self, filter_type, cutoff=1e6, order=1):
+        self.cutoff=cutoff
+        self.order=order
+        self.filter_type = filter_type
+        self.poles = self._butterworth_poles(self.cutoff,self.order)
+
+    def _butterworth_poles(self, cutoff, order):
+        Wcutoff = (2*math.pi*cutoff)
+        poles = []
+        for k in range(1,order+1):
+            poles.append(Wcutoff * np.exp(complex(0,((2*k)+order-1)*np.pi)/(2*order)))
+        return poles
+
+    def filter_fft(self, fft_freq, fft):
+        if(self.filter_type.lower() == "hpf"):
+            return self._hpf(fft_freq,fft)
+        elif(self.filter_type.lower() == "lpf"):
+            return self._lpf(fft_freq,fft)
+        else:
+            print("unknown filter type: %s" % self.filter_type)
+            return self.fft
+
+    def _hpf(self, fft_freq, fft):
+        #print("HPF Filter Order %d, Cutoff %.3e" % (self.order, self.cutoff)) 
+        if(self.order < 1):
+            print("HPF order < 1 : %d " % self.order)
+            return fft
+
+        Wcutoff = (2*math.pi*self.cutoff)
+        filtered = np.ones_like(fft,dtype=np.complex)
+        for i,freq in enumerate(fft_freq):
+            if(freq == 0):
+                filtered[i] = complex(1e-30,0)
+            else:
+                w = freq * (2*math.pi)
+                h=complex(1,0)
+                for p in self.poles:
+                    h *= complex(0,w)/(complex(0,w) + p)
+                filtered[i] = h * fft[i]
+        return filtered
+
+    def _lpf(self, fft_freq, fft):
+        #print("LPF Filter Order %d, Cutoff %.3e" % (self.order, self.cutoff)) 
+        if(self.order < 1):
+            print("LPF order < 1 : %d " % self.order)
+            return fft
+
+        Wcutoff = (2*math.pi*self.cutoff)
+        filtered = np.ones_like(fft, dtype=np.complex)
+        for i,freq in enumerate(fft_freq):
+                w = freq * (2*math.pi)
+                h=complex(1,0)
+                for p in self.poles:
+                    h *= Wcutoff / (complex(0,w) - p)
+                filtered[i] = h * fft[i]
+        return filtered
+
+class dme_signal(object):
+    def __init__(self):
+        self.filters   = []
+        #self.fft_value = []
+        #self.fft_freq  = []
+        #self.t_domain_mdi = None
+        #self.t_domain_filtered = None
+
+    def add_filter(self,filter_type,cutoff,order):
+        if(len(self.filter)==0):
+            self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
+            print("#Creating Filter Container")
+        self.filters.append(analog_filter_s_domain(filter_type, cutoff, order))
+        self.filter = self.filters[-1].filter_fft(self.fft_freq, self.filter)
+
+    def get_filtered_fft(self):
+        #self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
+        #for f in self.filters:
+        #    self.filter = f.filter_fft(self.fft_freq, self.filter)
+        self.fft_filtered = np.ones_like(self.fft_freq,dtype=np.complex)
+        for i in range(self.filter.size):
+            self.fft_filtered[i] = self.fft_value[i] * self.filter[i]
+        return self.fft_filtered
+
+    def process_mdi_data(self):
+        self.eye_mdi = self.process_data(self.t_domain_mdi, filename="eye_mdi")
+
+    def process_filtered_data(self):
+        self.eye_filtered = self.process_data(self.t_domain_filtered,filename="eye_filtered")
+
+    def process_data(self,t_domain,filename="eye"):
+        print(filename)
+        eye = eye_diagram(
+                [t_domain],
+                [self.dme_transmitter],
+                self.symbol_period,
+                self.sample_period,
+                node_number=self.node.number,
+                imgDir=self.imgDir,
+                filename=filename
+                )
+
+        min_corr_value_list = []
+        #for i in range(0,len(self.t_domain_filtered)):
+        self.corr_data_txt =  os.path.join(self.imgDir,("corr_data_%d.txt" % self.node.number))
+        dc = dme_correlator(t_domain, self.sample_period,
+                eye.t_offset, self.dme_transmitter, filename=self.corr_data_txt)
+
+        self.corrpng =  os.path.join(self.imgDir,("corr_node_%d.png" % self.node.number))
+        dc.plot_correlation(filename=self.corrpng, title=("Correlation Node %d" % self.node.number))
+        min_corr_value_list.append(dc.min_corr_value)
+        self.min_corr_value = np.amin(min_corr_value_list)
+        print("%2d %.6e %.6e %6.3fnV*s : %6.3fnV*s %5.3f" % (
+            self.node.number,
+            eye.crossing1_width,
+            eye.crossing2_width,
+            eye.eye_area_1*1e9,
+            eye.eye_area_2*1e9,
+            self.min_corr_value))
+
+        return eye
+
+    def plot_filter(self, filename="filter.png", title='filter'):
+        f, plt = pyplot.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
+        plt.set_title(title)
+        plt.set_xscale("log")
+        plt.plot(self.fft_freq, 20*np.log10(np.abs(self.filter)))
+        pyplot.savefig(filename)
+        pyplot.close(f)
+
+    def output_filter_to_file(self, filename="filter.txt"):
+        with open(filename, 'w') as out:
+            for i in range(0,len(self.fft_freq)):
+                out.write("%.12e %.12e %.12e\n" % 
+                        (self.fft_freq[i],
+                            20*math.log10(np.abs(self.filter[i])),
+                            np.angle(self.filter[i])
+                            )
+                        )
+
+    def output_t_domain_to_file(self, filename="t_domain.txt"):
+        with open(filename, 'w') as out:
+            out.write("#time t_domain_mdi t_domain_filtered\n")
+            for i in range(0,len(self.fft_freq)):
+                out.write("%.12e %.12e %.12e\n" % 
+                        (i * self.sample_period,
+                            self.t_domain_mdi[i],
+                            self.t_domain_filtered[i]))
+
+
+class dme_transmitter(dme_signal):
+    def __init__(self,ts=1/81.92e6,ns=8192,symbol_period=80e-9,n_symbols=1253,amplitude=0.5,zin=None):
+        super(dme_transmitter, self).__init__()
+        self.sample_period = ts #1/81.92e6
         self.ns = ns #8192
-        self.tstop=ts*ns 
-        self.tper = ts * ns / prime
-        self.trise=10e-9
-        self.thigh = duty_cycle * (self.tper - 2 * self.trise)
-        self.tlow  = (1-duty_cycle) * (self.tper - 2 * self.trise)
-
-        self.pwl_wave = pwlWave()
-        tstart = 0
-        t0 = tstart
-        self.amp=1
-
-        if(False): #short pulse
-            self.pwl =     ["%.12f %.2f" % (t0,               0)]
-            self.pwl.append("%.12f %.2f" % (t0+1e-12,  self.amp))
-            self.pwl.append("%.12f %.2f" % (t0+self.ts,  self.amp))
-            self.pwl.append("%.12f %.2f" % (t0+self.ts+1e-12,  0))
-            self.pwl.append("%.12f %.2f" % (self.tper, 0))
-
-        if(True):
-            self.pwl =     ["%.12f %.2f" % (t0,               1*self.amp)]
-            self.pwl.append("%.12f %.2f" % (self.thigh,       1*self.amp))
-            self.pwl.append("%.12f %.2f" % (self.thigh+trise, 0))
-            self.pwl.append("%.12f %.2f" % (self.tper-trise , 0))
-            self.pwl.append("%.12f %.2f" % (self.tper,        1*self.amp))
-            self.pwl_wave.buildPwlFromText(self.pwl)
-
-        self._sample_()
-        self._fft_()
-
-    def _sample_(self):
-        self.sampled_times  = []
-        self.sampled_values = []
-        for i in range(0,self.ns):
-            tx = i * self.ts
-            self.sampled_times.append(tx)
-            self.sampled_values.append(self.pwl_wave.pwlTimes(tx))
-            #dme.write("%.12f %.12f\n" % (tx, values[-1]))
-            ##use this to make an eye diagram
-            #t0=self.per/2
-            #loop=per
-            #if(False):
-            #    if(tx - t0 > loop):
-            #        t0+=loop
-            #        print("")
-            #    print("%.12f %.12f" % (tx-t0, wave.pwlTimes(tx)))
-        #print("#last timepoint = %.12f, %.2f" % (tx, values[-1]))
-
-    def _fft_(self):
-        values = np.array(self.sampled_values, dtype=float)
-        self.fft_value = np.fft.rfft(values)
-        self.fft_freq  = np.fft.rfftfreq(n=values.size, d=self.ts)
-        #mag = np.abs(fft_value)**2
-        #reconstruct = np.fft.irfft(fft_value)
-
-        #for i in range(0,len(reconstruct)):
-            #print("%.12f %.12f" % (ts*i, reconstruct[i]))
-
-        #with open("dme_wave.fft", 'w') as fft:
-        #    for i in range(0,len(fft_freq)):
-        #        fft.write("{:.12f} {:.12g}\n".format(fft_freq[i], fft_value[i]))
-
-class dme_wave(object):
-    def __init__(self,ts=1/81.92e6,ns=8192,n_symbols=1253,amplitude=0.5,zin=None):
-        self.ts = ts #1/81.92e6
-        self.ns = ns #8192
+        self.symbol_period=symbol_period
         self.tstop=ts*ns 
         self.n_symbols=n_symbols
+        self.amp=amplitude
+        self.zin=zin
+        self.tstop=ts*ns 
 
+        self._generateRandomBits()
+        self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
+
+    def _generateRandomBits(self):
         self.pattern = np.random.randint(2,size=self.n_symbols)
-        self.tx_filter = np.ones(shape=int(ns/2)+1,dtype=complex)
         self.pattern[0]=1
         self.pattern[-1]=0
-        tstart = 0
-        self.amp=amplitude
-        self.trise=10e-9
-        self.per=80e-9
+        
+        self.trise=10e-9 #make this an input parameter
         self.pwl = ["0 %.3f" % self.amp]
-        t0 = tstart
-        tflat = (self.per-(4*self.trise))/2
+        t0 = 0
+
+        #build up a piece wise linear version of the DME signal
+        tflat = (self.symbol_period-(4*self.trise))/2
         for i in self.pattern:
             x = i * self.amp * 2
             self.pwl.append("%.12f %.2f" % (t0 +  self.trise           , x-self.amp))
             self.pwl.append("%.12f %.2f" % (t0 + (self.trise+tflat)    , x-self.amp))
-            self.pwl.append("%.12f %.2f" % (t0 + (3*self.trise+tflat)  ,
+            self.pwl.append("%.12f %.2f" % (t0 + (3*self.trise+1*tflat)  ,
                 -self.amp+(2*self.amp*(1-i))))
             self.pwl.append("%.12f %.2f" % (t0 + (3*self.trise+2*tflat),
                 -self.amp+(2*self.amp*(1-i))))
-            #print("%d %s %s %s %s" % (i, self.pwl[-4], self.pwl[-3], self.pwl[-2], self.pwl[-1]))
-            t0 += self.per
-        #self.pwl.append("%.12f %.2f" % (self.per*len(self.pattern), -self.amp+(2*self.amp*(1-i))))
+            t0 += self.symbol_period
+
+        #pass the piece wise linear version of the DME signal to pwl_wave
+        #use pwl_wave methods to get interpolated samples of the DME signal
         self.pwl_wave = pwlWave()
         self.pwl_wave.buildPwlFromText(self.pwl)
 
+        #sample the pwl_wave based on the 1/self.ts passed to this method
         self._sample_dme()
+
+        #make an FFT of the sampled signal
         self._fft_dme()
-        cutoff = 20e6
-        order = 1
-        #self._lpf_dme(cutoff, order)
 
-        if(zin):
-            for i,f in enumerate(self.fft_freq):
-                self.fft_value[i] = zin[i] * self.fft_value[i]
+        #if the complex input impedance of a transmission line is passed to this
+        #method modify the fft value by that impedance
+        if(self.zin):
+            self.fft_value = self.zin * self.fft_value
 
-        t_domain_sig = np.fft.irfft(self.fft_value)
-        #print(t_domain_sig)
-        #f, eye = pyplot.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
-        #eye.plot(range(len(t_domain_sig)), t_domain_sig)  # Plot more data on the axes...
-        #eye.set_xlim([0,128])
-        #pyplot.savefig("junk.png")
-        #pyplot.close(f)
+    def _sample_dme(self):
+        self.sampled_times  = []
+        self.t_domain_mdi = []
+        for i in range(0,self.ns):
+            tx = i * self.sample_period
+            self.sampled_times.append(tx)
+            self.t_domain_mdi.append(self.pwl_wave.pwlTimes(tx))
+
+    def _fft_dme(self):
+        values = np.array(self.t_domain_mdi, dtype=float)
+        self.fft_value = np.fft.rfft(values)
+        self.fft_freq  = np.fft.rfftfreq(n=values.size, d=self.sample_period)
 
     def output_pwl_to_file(self, filename="pwl.txt"):
         with open(filename, 'w') as out:
@@ -252,100 +344,38 @@ class dme_wave(object):
         with open(filename, 'w') as out:
             for i in range(0,len(self.sampled_times)):
                 out.write("%.12f %.12f\n" % 
-                        (self.sampled_times[i], self.sampled_values[i]))
-
-    def _butterworth_poles(self, cutoff, order):
-        Wcutoff = (2*math.pi*cutoff)
-        poles = []
-        for k in range(1,order+1):
-            poles.append(Wcutoff * np.exp(complex(0,((2*k)+order-1)*np.pi)/(2*order)))
-        return poles
-
-    def _hpf_dme(self, cutoff, order):
-        print("HPF Filter Order %d" % (order))
-        Wcutoff = (2*math.pi*cutoff)
-        if(order < 1):
-            return
-
-        poles = self._butterworth_poles(cutoff, order)
-        
-        for i,freq in enumerate(self.fft_freq):
-            if(freq == 0):
-                self.tx_filter[i] = np.nan
-            else:
-                w = freq * (2*math.pi)
-                h=1
-                for p in poles:
-                    #h *= 1 / (complex(0,w) - complex(0,p.imag))
-                    h *= complex(0,w)/(complex(0,w) + p)
-                self.tx_filter[i] = h * self.tx_filter[i]
-
-        #self.fft_value *= self.tx_filter
-
-    def _lpf_dme(self, cutoff, order):
-        #self.tx_filter = np.ones(shape=int(self.ns/2)+1,dtype=complex)
-        Wcutoff = (2*math.pi*cutoff)
-        poles = self._butterworth_poles(cutoff, order)
-        if(order < 1):
-            return
-        print("LPF")
-        for i,freq in enumerate(self.fft_freq):
-                w = freq * (2*math.pi)
-                h=1
-                for p in poles:
-                    h *= Wcutoff / (complex(0,w) - p)
-                self.tx_filter[i] = h * self.tx_filter[i]
-        #self.fft_value *= self.tx_filter
-
-
-    def output_filter_to_file(self, filename="filter.txt"):
-        with open(filename, 'w') as out:
-            for i in range(0,len(self.fft_freq)):
-                out.write("%.12e %.12e %.12e\n" % 
-                        (self.fft_freq[i],
-                            20*math.log10(np.abs(self.tx_filter[i])),
-                            np.angle(self.tx_filter[i])
-                            )
-                        )
-
-    def _sample_dme(self):
-        self.sampled_times  = []
-        self.sampled_values = []
-        for i in range(0,self.ns):
-            tx = i * self.ts
-            self.sampled_times.append(tx)
-            self.sampled_values.append(self.pwl_wave.pwlTimes(tx))
-            #dme.write("%.12f %.12f\n" % (tx, values[-1]))
-            ##use this to make an eye diagram
-            #t0=self.per/2
-            #loop=per
-            #if(False):
-            #    if(tx - t0 > loop):
-            #        t0+=loop
-            #        print("")
-            #    print("%.12f %.12f" % (tx-t0, wave.pwlTimes(tx)))
-        #print("#last timepoint = %.12f, %.2f" % (tx, values[-1]))
-
-    def _fft_dme(self):
-        values = np.array(self.sampled_values, dtype=float)
-        self.fft_value = np.fft.rfft(values)
-        self.fft_freq  = np.fft.rfftfreq(n=values.size, d=self.ts)
-        #mag = np.abs(fft_value)**2
-        #reconstruct = np.fft.irfft(fft_value)
-
-        #for i in range(0,len(reconstruct)):
-            #print("%.12f %.12f" % (ts*i, reconstruct[i]))
-
-        #with open("dme_wave.fft", 'w') as fft:
-        #    for i in range(0,len(fft_freq)):
-        #        fft.write("{:.12f} {:.12g}\n".format(fft_freq[i], fft_value[i]))
+                        (self.sampled_times[i], self.t_domain_mdi[i]))
 
 
 #compare a dme wave, symbol by symbol, to an ideal symbol to recover data
-#
+class dme_receiver(dme_signal):
+    def __init__(self, node, dme_transmitter, imgDir):
+        super(dme_receiver, self).__init__()
+        self.node = node
+        self.dme_transmitter=dme_transmitter
+        self.symbol_period=dme_transmitter.symbol_period
+        self.sample_period=dme_transmitter.sample_period
+        self.imgDir = imgDir #directory for graph outputs
+
+        self.fft_freq = dme_transmitter.fft_freq
+        self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
+        self.t_domain_mdi      = None
+        self.t_domain_filtered = None
+
+        #hold refs to input dme signals for comparison after rx
+        self.eye=None
+
+    #fft representing a signal at the input of this node.
+    def rx_fft(self, fft):
+        self.fft_value = fft
+        self.t_domain_mdi      = (np.fft.irfft(fft))
+        self.fft_value_filtered = self.get_filtered_fft()
+        self.t_domain_filtered = np.fft.irfft(self.fft_value_filtered)
+
 class dme_correlator(object):
-    def __init__(self, dme_signal, ts, delay=0, dme_input=None):
+    def __init__(self, t_domain_dme, ts, delay=0, dme_input=None, filename='dme_wave.txt'):
         #make an ideal symbol for correlation of received signals
+        self.filename = filename
         self.corr_pwl =     ["0.0 1.0"]
         self.corr_pwl.append("39.999e-9 1")
         self.corr_pwl.append("40.001e-9  -1")
@@ -354,19 +384,26 @@ class dme_correlator(object):
         self.corr_wave.buildPwlFromText(self.corr_pwl)
 
         period_last = -1000
+        period      = -999
         csum=0
         ccount=-1
-        corr_avg = []
+        self.corr_avg = []
         corr_count = []
         recovered = []
-        with open("dme_wave.txt", 'w') as dme:
+        corr_ratio = 0
+        i=0
+        with open(filename, 'w') as dme:
+            dme.write("#%s %s %s %s %s %s %s %s %s %s %s\n" % 
+                    ("time", " x", " time", " dme_input.t_domain_mdi[i]", "sl", "c", "period",
+                        "corr_meas", "offset_time", "csum", "ccount"))
             #print(delay)
-            length = len(dme_signal)
+            length = len(t_domain_dme)
             stop   = length
             index=0
-            while(index<stop):
+            #going 1 past 'stop' makes sure the last bit is fully interpreted
+            while(index<=stop+1):
                 i=index%length
-                x=dme_signal[i]
+                x=t_domain_dme[i]
                 sl = -1
                 if x > 0:
                     sl = 1
@@ -380,7 +417,6 @@ class dme_correlator(object):
                 corr_meas = abs(sl-c)
                 if(period != period_last and ccount>0):
                     corr_ratio = (csum/ccount) - 1.0
-                    corr_avg.append(abs(corr_ratio))
 
                     rec = -1
                     if(corr_ratio > 0.55):
@@ -394,10 +430,12 @@ class dme_correlator(object):
                     #if there is a partial bit increase the 'stop' threshold by
                     #parital count and the partial bit will be picked up as part
                     #of the last bit
-                    if(ccount>math.floor(80e-9/ts)):
+                    if(ccount>=math.floor(80e-9/ts)-1):
                         recovered.append(rec)
                         corr_count.append(ccount)
+                        self.corr_avg.append(abs(corr_ratio))
                     else:
+                        #print("Period %d : Stop ADDED %d,%d" % (period,ccount,math.floor(80e-9/ts)-1))
                         stop+=ccount
                     period_last = period
                     csum=0
@@ -405,22 +443,28 @@ class dme_correlator(object):
                 csum+=corr_meas
                 ccount+=1
                 #output some data for verification / debugging
-                dme.write("% .12f % .12f % .12f % .12f % d % d % d % d % .12f\n" % (time, x,
-                        time, dme_input.sampled_values[i],sl,c,period,
-                        corr_meas, offset_time ))
+                dme.write("% .12f % .12f % .12f % .12f % d % d % d % d % .12f % .12f %d\n" % 
+                        (time, x, time, dme_input.t_domain_mdi[i],sl,c,period,
+                        corr_meas, offset_time, csum, ccount ))
 
                 index+=1
 
         for i in range(len(recovered)):
-        #for i in range(len(recovered)-10,len(recovered)):
-        #for i in range(0,10):
-            if(corr_avg[i] < 0.7):
-                print("%04d %5.3f %d %d %d" %
-                    (i,corr_avg[i],dme_input.pattern[i],recovered[i],corr_count[i]))
+            if(self.corr_avg[i] < 0.6):
+                print("Bad Correlation: %04d %5.3f %d %d %d" %
+                    (i,self.corr_avg[i],dme_input.pattern[i],recovered[i],corr_count[i]))
 
         #print("delay = %e" % delay)
         #print("min=%e" % np.amin(corr_avg))
-        self.min_corr_value = np.amin(corr_avg)
+        self.min_corr_value = np.amin(self.corr_avg)
+
+    def plot_correlation(self, filename="corr.png", title='Correlation'):
+        f, plt = pyplot.subplots(1,1, figsize=(10, 3))  # Create a figure and an axes.
+        plt.set_title(title)
+        #plt.set_xscale("log")
+        plt.plot(range(len(self.corr_avg)), self.corr_avg)
+        pyplot.savefig(filename)
+        pyplot.close(f)
 
 #generate eye diagrams from a 1d (y points only) array where data was sampled with
 #the specified sample rate and the data bit(s) have the specified sample period
@@ -432,14 +476,16 @@ class eye_diagram(object):
             symbol_period=80e-9,
             sample_period=1/81.92e6,
             node_number=0,
-            imgDir="."):
+            imgDir=".",
+            filename='eye'
+            ):
             
         self.symbol_period=symbol_period
         self.sample_period=sample_period
         self.t_domain_sigs = t_domain_sigs
         self.number = node_number
         self.imgDir = imgDir
-        self.imgfile =  os.path.join(imgDir, "eye%d.png" % self.number)
+        self.imgfile =  os.path.join(imgDir, "%s%d.png" % (filename,self.number))
         self.slicefile =  os.path.join(imgDir, "slice%d.png" % self.number)
         self.nbins=320
         self.nbits=256
@@ -451,6 +497,8 @@ class eye_diagram(object):
         self.amp_y = []
         self.amp_x = []
         self.heatmap = np.zeros(shape=(self.nbits, self.nbins))
+        self.filename = filename
+        self.node_number=node_number
         #self.average_yp = []
         #self.average_yn = []
         #self.average_x = []
@@ -460,13 +508,6 @@ class eye_diagram(object):
         self._make_eye()
 
         min_corr_value_list=[]
-        for i in range(0,len(t_domain_sigs)):
-            dc = dme_correlator(t_domain_sigs[i], sample_period, self.t_offset, dme_signals[i])
-            min_corr_value_list.append(dc.min_corr_value)
-        self.min_corr_value = np.amin(min_corr_value_list)
-        print("%2d %.6e %.6e %6.3fnV*s : %6.3fnV*s %5.3f" % (self.number, self.crossing1_width,
-            self.crossing2_width,self.eye_area_1*1e9, self.eye_area_2*1e9,
-            self.min_corr_value))
 
     #wrap the signal around an 80ns period (time % 80ns)
     #chop period into 0.5ns bins
