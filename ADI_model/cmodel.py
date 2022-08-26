@@ -85,15 +85,16 @@ def writeHtml(config, eye_data, min_corr_value):
         html += "</DIV>"
         html += "</DIV>"
 
-        html += "<DIV class=content>"
-        html += "<DIV class=main>"
+        if('eye_gif_mdi' in config):
+            html += "<DIV class=content>"
+            html += "<DIV class=main>"
 
-        html += "<p class=label>%s</p>" % ("Eye @ MDI")
-        html += "<a href=\"img/%s\">" %config['eye_gif_mdi']
-        html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"800\"></img>" % (config['eye_gif_mdi'], config['eye_gif_mdi'])
-        html += "</a>"
-        html += "</DIV>"
-        html += "</DIV>"
+            html += "<p class=label>%s</p>" % ("Eye @ MDI")
+            html += "<a href=\"img/%s\">" %config['eye_gif_mdi']
+            html += "<img src=\"img/%s\" alt=\"img/%s\" width=\"800\"></img>" % (config['eye_gif_mdi'], config['eye_gif_mdi'])
+            html += "</a>"
+            html += "</DIV>"
+            html += "</DIV>"
 
         html += "<DIV class=content>"
         html += "<DIV class=main>"
@@ -1172,8 +1173,8 @@ if __name__ == '__main__':
 
     print("Compiling Gif")
     import imageio.v2 as imageio
-    config['eye_gif_mdi'] = 'eye_mdi.gif'
     if(0):
+        config['eye_gif_mdi'] = 'eye_mdi.gif'
         loop = []
         for e in eye_data_mdi:
             loop.append(e.imgfile)

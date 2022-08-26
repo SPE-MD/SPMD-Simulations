@@ -211,7 +211,7 @@ class dme_signal(object):
         self.eye_filtered = self.process_data(self.t_domain_filtered,filename="eye_filtered")
 
     def process_data(self,t_domain,filename="eye"):
-        print(filename)
+        #print(filename)
         eye = eye_diagram(
                 [t_domain],
                 [self.dme_transmitter],
