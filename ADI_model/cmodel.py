@@ -22,6 +22,7 @@ from matplotlib.ticker import EngFormatter
 import datetime
 import colorsys
 import json
+import tempfile
 #from multiprocessing import Process
 
 
@@ -194,7 +195,6 @@ def _il(x):
 
 
 if __name__ == '__main__':
-    csvFile = os.path.join("zcable.csv")
 
     #dictionary to hold test specific json settings
     config = {}
@@ -208,11 +208,6 @@ if __name__ == '__main__':
         print(e)
         print("Issue loading 'defaults.json'")
         exit(1)
-
-
-    with open(csvFile, 'w') as csv:
-        #delete the csvFile.  It gets filled up in append mode later...
-        pass
 
     parser = argparse.ArgumentParser(
         description='802.3da network model generator',
@@ -737,16 +732,26 @@ if __name__ == '__main__':
     transmitter = Transmitter(port=tx_node.phy_port)
 
 
+
+    ################################################################################
+    #Create temporary directory for files needed before the design md5 is computed
+    ################################################################################
+    circuitTempDir = tempfile.TemporaryDirectory()
+    circuitTempDirName = circuitTempDir.name
+    print ("TemporaryDirectory = ",circuitTempDirName)
+
     ################################################################################
     #Save all settings complied from defaults, test specific json and command line args as "last_run.json"
     ################################################################################
-    with open("last_run.json", 'w') as f:
+    last_run_file = os.path.join(circuitTempDirName,"last_run.json")
+    with open(last_run_file, 'w') as f:
         json.dump(config, f, indent=2)
        
     ################################################################################
     #Write a spice file with the system setup
     ################################################################################
-    with open("cable.p", 'w') as cable:
+    cable_p_file = os.path.join(circuitTempDirName,"cable.p")
+    with open(cable_p_file, 'w') as cable:
         cable.write("*lumped transmission line model with %d segments per meter at %d meters\n"\
         % (config['segments_per_meter'], config['length']))
         cable.write("*and a %f meter long cable\n" % config['length'])
@@ -772,18 +777,32 @@ if __name__ == '__main__':
     if(config['analysis'] != 'ac'):
         exit(0)
 
-    cirfile = "zcable.%s.cir" % config['analysis']
-    rawfile = "zcable.%s.raw" % config['analysis']
+
+
+    cirfile  = os.path.join(circuitTempDirName,"zcable.%s.cir" % config['analysis'])
+    print ("cirfile = ", cirfile)
+
+    #rawfile = "zcable.%s.raw" % config['analysis']
     with open(cirfile, 'w') as zcable:
         zcable.write("*ac sim command for cable impedance measurement\n")
-        if(not config['includes']):
-            zcable.write(".include tlump2.p\n")
-            zcable.write(".include node.p\n")
-        else:
-            for i in config['includes']:
-                zcable.write("%s\n" % i)
+        try: 
+            if(not config['includes']):
+                zcable.write(".include tlump2.p\n")
+                shutil.copy("tlump2.p",circuitTempDirName)
+                zcable.write(".include node.p\n")
+                shutil.copy("node.p",circuitTempDirName)
+            else:
+                for i in config['includes']:
+                    zcable.write(".include %s\n" % i)
+                    shutil.copy("%s" % i,circuitTempDirName)
 
-        zcable.write(".include cable.p\n")
+            #cable.p was generated directly into the temp dir above
+            zcable.write(".include cable.p\n")
+            
+
+        except shutil.Error as e:
+            print (e)
+            raise Error('Failed to copy files to temp directory')
 
         #differential signal input
         zcable.write(transmitter.instance()+"\n")
@@ -821,13 +840,23 @@ if __name__ == '__main__':
     spi.followInclude = True
     spi.digestSpiceFile()
     design_md5 = spi.md5(skipParams=False,skipComments=True,skipSave=False)
+
+    #Create file names for all the files that go in the data directory
     spiSave  = os.path.join("data",design_md5,design_md5+".spi")
     logSave  = os.path.join("data",design_md5,design_md5+".log")
+    cirSave  = os.path.join("data",design_md5,design_md5+".cir")
     rawSave  = os.path.join("data",design_md5,design_md5+".raw")
     jsonSave = os.path.join("data",design_md5,design_md5+".json")
     outputdb = os.path.join("data",design_md5)
     imgDir   = os.path.join("data",design_md5,"img")
+    csvFile = os.path.join("data",design_md5,design_md5+".csv")
+    filterFile = os.path.join("data",design_md5,design_md5+"_filter.txt")
+    tDomainFile = os.path.join("data",design_md5,design_md5+"_t_domain.csv")
+    rlPlotFile = os.path.join("data",design_md5,design_md5+"_rl_plot.png")
     config['design_md5'] = design_md5
+    
+    #For debugging temp folder, pause here to inspect temp dir contents
+    #input("Pause design "+design_md5)
 
 
     #print( design_md5)
@@ -863,6 +892,14 @@ if __name__ == '__main__':
             print( "Cannot create img folder")
             exit(1)
 
+    #Copy files from temp folder that we want to save
+    shutil.copy(os.path.join(circuitTempDirName,"last_run.json"), outputdb)
+    
+    print ("Opening csvFile",csvFile)
+    with open(csvFile, 'w') as csv:
+        #delete the csvFile.  It gets filled up in append mode later...
+        pass
+
     #if there is already raw and log data in the md5 directory then assume the sim has 
     #already been run, otherwise run the sim
     try:
@@ -877,6 +914,9 @@ if __name__ == '__main__':
     except:
         print( "Running Simulation")
         runspice.runspice(spiSave)
+        if not os.path.isfile(rawSave):
+            print("Spice Run Failed for Design %s:\nRaw File does not exist!\n-> %s"% (design_md5, rawSave))
+            exit(1)
 
     ################################################################################
     #Set up containers to plot the output
@@ -1073,8 +1113,8 @@ if __name__ == '__main__':
         #rx.add_filter("lpf",15e6,1)
         #rx.add_filter("lpf",30e6,1)
         rx.rx_fft(fft_out)
-        rx.output_filter_to_file()
-        rx.output_t_domain_to_file()
+        rx.output_filter_to_file(filename=filterFile)
+        rx.output_t_domain_to_file(filename=tDomainFile)
 
         #insert new rx object here...
         #run correlations 
@@ -1231,6 +1271,6 @@ if __name__ == '__main__':
     if(config['noautoscale']):
         rl_plot.set_ylim([-70,10])
 
-    plt.savefig('rl_plot.png')
+    plt.savefig(rlPlotFile)
     plt.close(fig)
 

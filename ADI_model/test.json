@@ -10,7 +10,7 @@
     "noautoscale" : false,
     "analysis" : "tran",
     "includes" : [
-        ".include tlump_dc.p",
-        ".include node.p"
+        "tlump_dc.p",
+        "node.p"
     ]
 }
