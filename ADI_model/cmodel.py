@@ -793,8 +793,13 @@ if __name__ == '__main__':
                 shutil.copy("node.p",circuitTempDirName)
             else:
                 for i in config['includes']:
-                    zcable.write(".include %s\n" % i)
-                    shutil.copy("%s" % i,circuitTempDirName)
+                    if '.include' in i:
+                        includeStatement = i.split()
+                        zcable.write("%s\n" % i)
+                        shutil.copy("%s" % includeStatement[1],circuitTempDirName)
+                    else:
+                        zcable.write(".include %s\n" % i)
+                        shutil.copy("%s" % i,circuitTempDirName)
 
             #cable.p was generated directly into the temp dir above
             zcable.write(".include cable.p\n")
