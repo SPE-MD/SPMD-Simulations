@@ -25,11 +25,12 @@
     "plot_png_filename" : "zcable.png",
     "tx_filter" : {
         "comment"  : "list of filters to apply to the transmitted data",
+        "plot" : false,
         "filters" : [
             {
-                "filter_type" : "hpf",
+                "filter_type" : "lpf",
                 "cutoff" : 20e6,
-                "order" : 5
+                "order" : 2
             }
         ]
     },
@@ -50,7 +51,28 @@
         "rnode" : 10e3,
         "lcomp_match" : 1,
         "spice_model" : "node",
-        "drop_model" : null
+        "drop_model" : null,
+        "rx_filter" : {
+            "comment"  : "list of filters to apply to the received data for this node",
+            "plot" : true,
+            "filters" : [
+                {
+                    "filter_type" : "hpf",
+                    "cutoff" : 500e3,
+                    "order" : 1
+                },
+                {
+                    "filter_type" : "lpf",
+                    "cutoff" : 15e6,
+                    "order" : 1
+                },
+                {
+                    "filter_type" : "lpf",
+                    "cutoff" : 30e6,
+                    "order" : 1
+                }
+            ]
+        }
     },
     "default_segment" :
     {

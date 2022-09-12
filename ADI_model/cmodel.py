@@ -1076,9 +1076,14 @@ if __name__ == '__main__':
     print("#Generating Random DME Signal")
     dme_tx = dme_transmitter(ts=1/Fs,ns=Ns,symbol_period=80e-9,n_symbols=prime,amplitude=0.010,zin=sparams['zin'])
 
-    dme_tx.add_filter(filter_type="lpf",cutoff=20e6,order=5)
+    if('tx_filter' in config and 'filters' in config['tx_filter']):
+        for f in config['tx_filter']['filters']:
+            dme_tx.add_filter(filter_type=f['filter_type'],cutoff=f['cutoff'],order=f['order'])
+    else:
+        print("Fail")
+        exit(1)
     
-    if(0):
+    if('tx_filter' in config and config['tx_filter']['plot']):
         config['tx_filter_png'] = os.path.join("data",design_md5,"img",'tx_filter.png') 
         dme_tx.plot_filter(config['tx_filter_png'],title="tx_filter")
 
@@ -1127,14 +1132,21 @@ if __name__ == '__main__':
         rx.add_transfer_function(term1_gain, 'node/term1')
         rx.add_transfer_function(term2_gain, 'node/term2')
 
-        rx.add_filter(filter_type="hpf",cutoff=500e3,order=1)
-        rx.add_filter(filter_type="lpf",cutoff=15e6 ,order=1)
-        rx.add_filter(filter_type="lpf",cutoff=30e6 ,order=1)
+        if('rx_filter' in config['node_descriptions'][node.number] 
+                and 'filters' in
+                config['node_descriptions'][node.number]['rx_filter']):
+            for f in config['node_descriptions'][node.number]['rx_filter']['filters']:
+                rx.add_filter(filter_type=f['filter_type'],cutoff=f['cutoff'],order=f['order'])
+                #rx.add_filter(filter_type="hpf",cutoff=500e3,order=1)
+                #rx.add_filter(filter_type="lpf",cutoff=15e6 ,order=1)
+                #rx.add_filter(filter_type="lpf",cutoff=30e6 ,order=1)
 
         rx.add_white_noise(-101, 40e6)
         rx.rx_fft(fft_out)
 
-        if(0): #debug output for filter generation
+        #filter debug plot enabled in json file
+        if('rx_filter' in config['node_descriptions'][node.number] and
+                config['node_descriptions'][node.number]['rx_filter']['plot']):
             rx.output_filter_to_file()
             rx.output_t_domain_to_file()
 
