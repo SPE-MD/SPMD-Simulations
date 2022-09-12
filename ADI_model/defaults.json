@@ -5,8 +5,8 @@
         ".include node.p"
     ],
     "analysis" : "ac",
-    "nodes" : 16,
-    "length" : 50,
+    "nodes" : 10,
+    "length" : 100,
     "random_attach" : false,
     "start_attach" : 0,
     "end_attach" : 0,
@@ -23,7 +23,16 @@
     "noautoscale" : true,
     "noplot" : false,
     "plot_png_filename" : "zcable.png",
-    "eye_adjust" : [ 0, 0 ],
+    "tx_filter" : {
+        "comment"  : "list of filters to apply to the transmitted data",
+        "filters" : [
+            {
+                "filter_type" : "hpf",
+                "cutoff" : 20e6,
+                "order" : 5
+            }
+        ]
+    },
     "default_termination" : {
         "comment" : "cmatch declares how well the terminations match (in pct), 0 means perfet match. -1 means ccn is 1% high, ccp i 1% low",
         "rterm" : 100,
@@ -36,7 +45,7 @@
         "drop_length" : 0.01,
         "random_drop" : false,
         "cnode" : 30e-12,
-        "lcomp" : 50e-9,
+        "lcomp" : 50e-15,
         "lpodl" : 80e-6,
         "rnode" : 10e3,
         "lcomp_match" : 1,

@@ -15,6 +15,7 @@ from os.path import dirname
 import os.path 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
 import matplotlib.pyplot as pyplot
+from matplotlib.ticker import EngFormatter
 import mpUtil
 
 #expects to be initialized with two (x,y) tuples
@@ -182,18 +183,132 @@ class analog_filter_s_domain(object):
 
 class dme_signal(object):
     def __init__(self):
-        self.filters   = []
+        self.filters = []
+        self.noise   = []
+        self.transfer_functions = []
         #self.fft_value = []
         #self.fft_freq  = []
         #self.t_domain_mdi = None
         #self.t_domain_filtered = None
 
-    def add_filter(self,filter_type,cutoff,order):
+    def add_transfer_function(self, tf, label):
+        self.transfer_functions.append({'tf':tf, 'label': label})
+
+    def plot_transfer_functions(self,filename='tf.png', title='Tranfer Functions'):
+        f, plt = pyplot.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
+        plt.set_title(title)
+        plt.set_ylim([-50,50])
+        plt.set_xlim([0,50e6])
+        plt.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
+        #plt.set_xscale("log")
+        for x in self.transfer_functions:
+            plt.plot(self.fft_freq[1:], 20*np.log10(np.abs(x['tf'][1:])), label=x['label'])
+        plt.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
+        pyplot.savefig(filename)
+        pyplot.close(f)
+
+    def add_filter(self,filter_type="lpf",cutoff=20e6,order=1):
         if(len(self.filter)==0):
             self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
             print("#Creating Filter Container")
         self.filters.append(analog_filter_s_domain(filter_type, cutoff, order))
         self.filter = self.filters[-1].filter_fft(self.fft_freq, self.filter)
+
+    def tx_psd_upper_limit(self,freq):
+        lim = np.ones_like(freq)
+        for i in range(freq.size):
+            lim[i] = self._tx_ul(freq[i])
+            #print("%.3e %.3e" % (freq[i], lim[i]))
+        return lim
+
+    def tx_psd_lower_limit(self,freq):
+        lim = np.ones_like(freq)
+        for i in range(freq.size):
+            lim[i] = self._tx_ll(freq[i])
+        return lim
+
+    #piecewise linear description of transmitter upper limit PSD
+    def _tx_ul(self,f):
+        if(f < 0.3e6):
+            return np.nan
+        elif(f < 15e6):
+            return -61
+        elif(f < 25e6):
+            return (-40-(1.4*(f/1e6)))
+        elif(f < 40e6):
+            return -75
+        else:
+            return np.nan
+
+    #piecewise linear description of transmitter upper limit PSD
+    def _tx_ll(self,f):
+        if(f < 5e6):
+            return np.nan
+        elif(f < 10e6):
+            return -87+(2*(f/1e6))
+        elif(f <= 15e6):
+            return -47-(2*(f/1e6))
+        else:
+            return np.nan
+
+
+    def add_white_noise(self,noise_dBm_per_hz,noise_bandwidth):
+        #get a the frequency step so noise can be spread across the spectrum
+        df = self.fft_freq[1]-self.fft_freq[0]
+       
+        #dBm to Vrms (R=50Ohms):
+        #dBm = 10*log10((Vrms^2/R)/0.001)
+        #dBm = 20*log10(Vrms) - 10*log10(R) + 10*log10(1/0.001)
+        #dBm = dBm/Hz + 10*log(noise_bandwidth)
+        #-101 dBm/Hz at 40MHz Bandwidth = ~13mVrms
+
+        #unwind the equations above to find Vrms noise levels per fft step (noise in 20kHz por ejemplo) 
+        #noise as Vrms/Hz should be integrated as a root-sum-square to get final Vrms value
+        #what is the factor of 1.83? I found it empirically.
+        #1.83 = 10**(5.25/20) =  what is 5.25??
+        nl_f = 1.83*np.sqrt(noise_bandwidth) * 10 ** ((noise_dBm_per_hz + 10*np.log10(df) - 30 + 10*np.log10(50))/(20)) 
+        #(10*np.log10(np.abs(V)**2/50) + 30 - 10*np.log10(df*40e6)))
+        #10**(-71/20) * 10**(10*log10(df))
+        #nl_f = np.sqrt(df*1.99e-5)
+        print(nl_f)
+        print(df)
+
+        #generate an array of random phases
+        ph  = np.random.uniform(0,2*np.pi,len(self.fft_freq))
+        mag = np.random.normal(0,nl_f,len(self.fft_freq))
+        #add the real part (noise voltage) to the phases
+        #print(nl_f)
+        self.noise = np.full_like(self.fft_freq, nl_f, dtype='complex') 
+        #change mag,angle into real,imag...
+        #with open("noise_fft_j.txt", 'w') as out:
+        #    for i in range(0,len(self.fft_freq)):
+        #        out.write("%.12e %.12e\n" % 
+        #                (self.fft_freq[i], np.real(self.noise[i])))
+
+        for i in range(len(self.noise)):
+            if(self.fft_freq[i] < noise_bandwidth):
+                self.noise[i] = mag[i] * np.exp(1j*ph[i])
+                #self.noise[i] = mag[i] * np.exp(0)
+            else:
+                self.noise[i] = complex(10e-31,0)
+
+        self.noise[0] = complex(10e-31,0)
+
+        #with open("noise_fft.txt", 'w') as out:
+        #    for i in range(0,len(self.fft_freq)):
+        #        out.write("%.12e %.12e %.12e\n" % 
+        #                (self.fft_freq[i],
+        #                    20*math.log10(np.abs(self.noise[i])),
+        #                    np.angle(self.noise[i])
+        #                    )
+        #                )
+
+        n_t = np.fft.irfft(self.noise)
+        print("Rms Noise: %e" % np.std(n_t))
+        #with open("noise_%d.txt" % self.node.number, 'w') as out:
+        #    for x in n_t:
+        #        out.write("%.12e\n" % x)
+
 
     def get_filtered_fft(self):
         #self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
@@ -242,11 +357,35 @@ class dme_signal(object):
 
         return eye
 
-    def plot_filter(self, filename="filter.png", title='filter'):
+    def plot_filter(self, filename="filter.png", title='filter', xmax=None):
         f, plt = pyplot.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
         plt.set_title(title)
+        if(xmax):
+            plt.set_xlim([self.fft_freq[1],xmax])
         plt.set_xscale("log")
-        plt.plot(self.fft_freq, 20*np.log10(np.abs(self.filter)))
+        plt.plot(self.fft_freq[1:], 20*np.log10(np.abs(self.filter[1:])))
+        pyplot.savefig(filename)
+        pyplot.close(f)
+
+    def plot_fft(self, filename="filter.png", title='fft'):
+        f, plt = pyplot.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
+        plt.set_title(title)
+        plt.set_xlim([0,50e6])
+        plt.set_ylim([-120,-50])
+        #plt.set_ylim([-50,20])
+        #plt.set_xscale("log")
+        #dBm = 20*log10(Vrms) - 10*log10(R) + 10*log10(1/0.001)
+        df=self.fft_freq[1]-self.fft_freq[0]
+        #print(20*np.log10(np.abs(self.fft_filtered[1])))
+        #print(10*np.log10(50))
+        #print(10*np.log10(1/0.001))
+        #print(10*np.log10(df))
+        #plt.plot(self.fft_freq[1:], 20*np.log10(np.abs(self.fft_filtered[1:])) - 10*np.log10(50) - 10*np.log10(40e6))
+        plt.plot(self.fft_freq[1:], (10*np.log10(np.abs(self.fft_filtered[1:])**2/50) +30 - 10*np.log10(40e6) - 10*np.log10(df)))
+        plt.plot(self.fft_freq[1:], (10*np.log10(np.abs(self.noise[1:])**2/50)        +30 - 10*np.log10(40e6) - 10*np.log10(df)))
+        plt.plot(self.fft_freq[1:], self.tx_psd_upper_limit(self.fft_freq[1:]))
+        plt.plot(self.fft_freq[1:], self.tx_psd_lower_limit(self.fft_freq[1:]))
+        print(np.median((10*np.log10(np.abs(self.noise[1:60])**2/50)        +30 - 10*np.log10(40e6) - 10*np.log10(df))))
         pyplot.savefig(filename)
         pyplot.close(f)
 
@@ -368,8 +507,14 @@ class dme_receiver(dme_signal):
     #fft representing a signal at the input of this node.
     def rx_fft(self, fft):
         self.fft_value = fft
+        if(len(self.noise)):
+            #numpy arrays add element by element with this notation
+            self.fft_value += self.noise
         self.t_domain_mdi      = (np.fft.irfft(fft))
         self.fft_value_filtered = self.get_filtered_fft()
+        #if(len(self.noise)):
+        #    #numpy arrays add element by element with this notation
+        #    self.fft_value_filtered += self.noise
         self.t_domain_filtered = np.fft.irfft(self.fft_value_filtered)
 
 class dme_correlator(object):
@@ -394,8 +539,8 @@ class dme_correlator(object):
         i=0
         with open(filename, 'w') as dme:
             dme.write("#%s %s %s %s %s %s %s %s %s %s %s\n" % 
-                    ("time", " x", " time", " dme_input.t_domain_mdi[i]", "sl", "c", "period",
-                        "corr_meas", "offset_time", "csum", "ccount"))
+                    ("time", " x", " dme_input.t_domain_mdi[i]", "sl", "c", "period",
+                        "corr_meas", "offset_time", "csum", "ccount", "index>length"))
             #print(delay)
             length = len(t_domain_dme)
             stop   = length
@@ -419,9 +564,9 @@ class dme_correlator(object):
                     corr_ratio = (csum/ccount) - 1.0
 
                     rec = -1
-                    if(corr_ratio > 0.55):
+                    if(corr_ratio >= 0.0):
                         rec=1
-                    elif(corr_ratio < -0.55):
+                    else:
                         rec=0
 
                     #this section ignores partial bits at the beginning
@@ -437,22 +582,28 @@ class dme_correlator(object):
                     else:
                         #print("Period %d : Stop ADDED %d,%d" % (period,ccount,math.floor(80e-9/ts)-1))
                         stop+=ccount
+                    dme.write("\n")
                     period_last = period
                     csum=0
                     ccount=0
                 csum+=corr_meas
                 ccount+=1
                 #output some data for verification / debugging
-                dme.write("% .12f % .12f % .12f % .12f % d % d % d % d % .12f % .12f %d\n" % 
-                        (time, x, time, dme_input.t_domain_mdi[i],sl,c,period,
-                        corr_meas, offset_time, csum, ccount ))
+                dme.write("% .12f % .12f % .12f % d % d % d % d % .12f % .12f %d %s\n" % 
+                        (time, x, dme_input.t_domain_mdi[i],sl,c,period,
+                        corr_meas, offset_time, csum, ccount, (index>length) ))
 
                 index+=1
+            dme.write("#%s %s %s %s %s %s %s %s %s %s %s\n" % 
+                    ("time", " x", " dme_input.t_domain_mdi[i]", "sl", "c", "period",
+                        "corr_meas", "offset_time", "csum", "ccount", "index>length"))
 
-        for i in range(len(recovered)):
-            if(self.corr_avg[i] < 0.6):
-                print("Bad Correlation: %04d %5.3f %d %d %d" %
-                    (i,self.corr_avg[i],dme_input.pattern[i],recovered[i],corr_count[i]))
+
+        if(0):
+            for i in range(len(recovered)):
+                if(self.corr_avg[i] < 0.6):
+                    print("Bad Correlation: %04d %5.3f %d %d %d" %
+                        (i,self.corr_avg[i],dme_input.pattern[i],recovered[i],corr_count[i]))
 
         #print("delay = %e" % delay)
         #print("min=%e" % np.amin(corr_avg))

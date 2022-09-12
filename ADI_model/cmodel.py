@@ -146,8 +146,12 @@ def writeHtml(config, eye_data, min_corr_value):
         f = open(htmlFile,"w")
         f.write(html)
         f.close()
-        import webbrowser
-        webbrowser.open(htmlFile, new=0, autoraise=True)
+
+        print(config['noplot'])
+        if not config['noplot']:
+            print(not config['noplot'])
+            import webbrowser
+            webbrowser.open(htmlFile, new=0, autoraise=True)
 
 
 def butter_lowpass(cutoff, fs, order=1):
@@ -194,7 +198,6 @@ def _il(x):
 
 
 if __name__ == '__main__':
-    csvFile = os.path.join("zcable.csv")
 
     #dictionary to hold test specific json settings
     config = {}
@@ -210,10 +213,7 @@ if __name__ == '__main__':
         exit(1)
 
 
-    with open(csvFile, 'w') as csv:
-        #delete the csvFile.  It gets filled up in append mode later...
-        pass
-
+    
     parser = argparse.ArgumentParser(
         description='802.3da network model generator',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -352,12 +352,6 @@ if __name__ == '__main__':
             #default=config_default['attach_points']
             )
 
-    parser.add_argument('--eye_adjust', type=float, nargs=2,\
-            help='adjust eye diagram delay, set the delay to be positive because the parser cannot handle\
-            negative numbers',
-            #default=[0,0]
-            )
-
     parser.add_argument('--json', type=str, \
             help='specify a json file containing a system description',
             default=None
@@ -441,7 +435,7 @@ if __name__ == '__main__':
         config['default_node']['lpodl']       = args.lpodl
     if args.rnode:
         config['default_node']['rnode']       = args.rnode
-    if args.rnode:
+    if args.noplot:
         config['noplot']                      = args.noplot
 
     if not "htmlTemplates" in config: 
@@ -795,7 +789,7 @@ if __name__ == '__main__':
         bits_to_prime = [[13, 1253],[14,617],[15,313]]
         Ns = 2**14
         per = 80e-9
-        prime = 313
+        prime = 617
         Fs = Ns / (prime * per)
         
         #ac simulation command using coherant sample parameters
@@ -924,6 +918,7 @@ if __name__ == '__main__':
     #Write the csv file
     ################################################################################
     if(0):
+        csvFile = os.path.join("zcable.csv")
         with open(csvFile, 'w') as csv:
             csv.write(mpUtil.aoa2csv(mpUtil.transpose(csv_aoa)))
 
@@ -1031,18 +1026,19 @@ if __name__ == '__main__':
     ################################################################################
     print("#Generating Random DME Signal")
     dme_tx = dme_transmitter(ts=1/Fs,ns=Ns,symbol_period=80e-9,n_symbols=prime,amplitude=0.010,zin=sparams['zin'])
-    #dme_tx.add_filter("lpf",20e6,5)
+
+    dme_tx.add_filter(filter_type="lpf",cutoff=20e6,order=5)
     
     if(0):
         config['tx_filter_png'] = os.path.join("data",design_md5,"img",'tx_filter.png') 
         dme_tx.plot_filter(config['tx_filter_png'],title="tx_filter")
 
     if(0): #used to check / debug sampling data externally
-        #dme_tx.output_pwl_to_file()
-        #dme_tx.output_sampled_pwl_to_file()
+        dme_tx.output_pwl_to_file()
+        dme_tx.output_sampled_pwl_to_file()
         dme_tx.t_domain_filtered = np.fft.irfft(dme_tx.get_filtered_fft())
         dme_tx.output_t_domain_to_file()
-        exit(1)
+        #exit(1)
 
     #save the plot as a png file incase another script is making a gif
     pspec_plot.set_ylabel('DME Input Spectrum')  # Add an y-label to the axes.
@@ -1059,6 +1055,7 @@ if __name__ == '__main__':
     min_corr_value_list = []
     receivers = []
     #try :
+    unity_gain = np.ones_like(dme_tx.get_filtered_fft())
     for z,n in enumerate(nodes):
         #multiply transmit fft by transfer function to node of interest
         fft_out = rf.fft_transfer(
@@ -1066,15 +1063,30 @@ if __name__ == '__main__':
                 tx_node.phy_port_voltage(),
                 n.phy_port_voltage())
 
+        term1_gain = rf.fft_transfer(
+                unity_gain,
+                term_start.port_voltage(),
+                n.phy_port_voltage())
+
+        term2_gain = rf.fft_transfer(
+                unity_gain,
+                term_end.port_voltage(),
+                n.phy_port_voltage())
+
         rx = dme_receiver(n, dme_tx, imgDir)
         receivers.append(rx)
+        rx.add_transfer_function(term1_gain, 'node/term1')
+        rx.add_transfer_function(term2_gain, 'node/term2')
 
-        #rx.add_filter("hpf",500e3,1)
-        #rx.add_filter("lpf",15e6,1)
-        #rx.add_filter("lpf",30e6,1)
+        rx.add_filter(filter_type="hpf",cutoff=500e3,order=1)
+        rx.add_filter(filter_type="lpf",cutoff=15e6 ,order=1)
+        rx.add_filter(filter_type="lpf",cutoff=30e6 ,order=1)
+
+        rx.add_white_noise(-101, 40e6)
         rx.rx_fft(fft_out)
-        rx.output_filter_to_file()
-        rx.output_t_domain_to_file()
+        if(0): #debug output for filter generation
+            rx.output_filter_to_file()
+            rx.output_t_domain_to_file()
 
         #insert new rx object here...
         #run correlations 
@@ -1093,7 +1105,11 @@ if __name__ == '__main__':
         #eye_data_mdi.append(rx.eye_mdi)
         eye_data_filtered.append(rx.eye_filtered)
         rx_filter_png = os.path.join("data",design_md5,"img","rx_filter_%d.png" % rx.node.number) 
+        rx_fft_png    = os.path.join("data",design_md5,"img","rx_fft_%d.png"    % rx.node.number) 
+        rx_tf_png     = os.path.join("data",design_md5,"img","rx_tf_%d.png"     % rx.node.number) 
         rx.plot_filter(rx_filter_png,title="rx_filter - Node %d" % rx.node.number)
+        rx.plot_fft(rx_fft_png,title="rx_fft - Node %d" % rx.node.number)
+        rx.plot_transfer_functions(filename=rx_tf_png, title="Gain to terminations node %d" % rx.node.number)
 
     print("Sampling Period: %.3fns" % (1/Fs*1e9))
     #except Exception as e:
@@ -1109,12 +1125,9 @@ if __name__ == '__main__':
 
     #saturation_level is the histogram / heatmap level that makes the heatmap eyediagrams saturate color.
     #Without this, the eye diagram gets normalized to the largest bin. This makes the sparse data hard to see.
-    #The level is automatically set to 1/2 the zero crossing bin height of the input dme signal
-    #saturation_index = int(eye_data[0].nbins/2)
-    #saturation_level = np.amax(eye_data[0].heatmap[int(eye_data[0].nbits/2)][eye_data[0].index1:eye_data[0].index2])/3
-    saturation_index = 0
+    #The level is automatically set to 1/3 the zero crossing bin height of the input dme signal
     saturation_level = eye_data_filtered[0].zero_crossing_array[0]/3
-    print("Saturation_level (%d): %d" % (saturation_index, saturation_level))
+    print("Saturation_level %d" % (saturation_level))
 
     eye1 = []
     eye2 = []
@@ -1219,18 +1232,19 @@ if __name__ == '__main__':
         #plt.show()
         plt.close()
 
-    fig, rl_plot = plt.subplots(1,1, figsize=(9, 2))  # Create a figure and an axes.
-    rl_limit = return_loss_limit(frequency[0])
-    il_limit = insertion_loss_limit(frequency[0])
-    rl_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
-    rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit")  
-    rl_plot.plot(frequency[0], s11_plot[0], label="test", color='k')  
-    rl_plot.set_ylabel('RL (dB)')  
-    rl_plot.set_xlim([0,xmax])
-    rl_plot.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
-    if(config['noautoscale']):
-        rl_plot.set_ylim([-70,10])
+    if(0):
+        fig, rl_plot = plt.subplots(1,1, figsize=(9, 2))  # Create a figure and an axes.
+        rl_limit = return_loss_limit(frequency[0])
+        il_limit = insertion_loss_limit(frequency[0])
+        rl_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
+        rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit")  
+        rl_plot.plot(frequency[0], s11_plot[0], label="test", color='k')  
+        rl_plot.set_ylabel('RL (dB)')  
+        rl_plot.set_xlim([0,xmax])
+        rl_plot.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
+        if(config['noautoscale']):
+            rl_plot.set_ylim([-70,10])
 
-    plt.savefig('rl_plot.png')
-    plt.close(fig)
+        plt.savefig('rl_plot.png')
+        plt.close(fig)
 

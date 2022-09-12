@@ -363,7 +363,8 @@ class ltcsimraw():
         index = dict(zip(labels, range(0,len(labels))))
         #print(labels)
         #frequency=[]
-        fft_out = [0]
+        #fft_out = [0]
+        fft_out =  [complex(1e-30,0)]
         for i in range(0,len(data)):
             vend   = data[i][index[vport2[0]]]-data[i][index[vport2[1]]]
             vin    = data[i][index[vport1[0]]]-data[i][index[vport1[1]]]
@@ -379,7 +380,8 @@ class ltcsimraw():
         index = dict(zip(labels, range(0,len(labels))))
         #print(labels)
         #frequency=[]
-        fft_out = [0]
+        #fft_out = [0]
+        fft_out =  [complex(1e-30,0)]
         for i in range(0,len(data)):
             zin    = data[i][index[vport1[0]]]-data[i][index[vport1[1]]] / data[i][index[iport]]
             #gain_mp = self.decodeComplex(vend/vin)

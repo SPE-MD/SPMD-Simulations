@@ -87,6 +87,13 @@ class Termination(object):
     def termination_resistor_current(self):
         return "I(%s)" % self.termination_resistor()
 
+    def port_voltage(self):
+        return [
+                "v(%sp)" % self.stim_port,
+                "v(%sn)" % self.stim_port,
+                ]
+
+
 
 if __name__ == '__main__':
     t0 = Termination(name="t0",port="t0", stim_port="ts")
