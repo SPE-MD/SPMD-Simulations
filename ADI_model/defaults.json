@@ -1,8 +1,8 @@
 {
     "defaults_comment" : "This are the default configuration parameters.  These can be overridden by command line args or by fields in a test-specific json file",
     "includes" : [
-        ".include tlump2.p",
-        ".include node.p"
+        "tlump2.p",
+        "node.p"
     ],
     "analysis" : "ac",
     "nodes" : 10,
