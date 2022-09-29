@@ -108,6 +108,12 @@
     "node_descriptions" : [],
     "trunk_description" : {
         "segments" : []
+    },
+    "tee": {
+        "touchstone": null,
+        "fitting_error_rms": 0.01,
+        "port_order": [1,2,3,4,5,6],
+        "fitted_model_name": "touchstone_tee"
     }
 
 }
