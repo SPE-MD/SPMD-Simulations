@@ -56,12 +56,12 @@ class TouchstoneFit(ABC):
                 print(f"Fit with {poles} poles")
                 if poles > max_poles:
                     raise RuntimeError("Unable to fit network ")
-                vf.vector_fit(n_poles_real=0, n_poles_cmplx=poles)
+                vf.vector_fit(n_poles_real=1, n_poles_cmplx=poles)
                 error = vf.get_rms_error()
                 if error < fitting_error:
                     print(f"Fitting Error RMS", error)
                     break
-                poles += 2
+                poles += 1
 
             vectorfit_cache[key] = vf
         else:
