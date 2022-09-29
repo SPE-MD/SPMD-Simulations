@@ -9,6 +9,8 @@
 from typing import List
 
 from abc import ABC, abstractproperty
+import matplotlib.pyplot as plt
+import numpy as np
 import os
 from pathlib import Path
 
@@ -69,14 +71,49 @@ class TouchstoneFit(ABC):
             cached = True
             vf = vectorfit_cache[key]
 
-        spice_file = Path("tmp_vectorfit") / f"fitted_{instance_name}_{fittedModelName}_{str(hash(key))}.sp"
-        spice_file.parent.mkdir(exist_ok=True)
+        self.spice_file = Path("tmp_vectorfit") / f"fitted_{instance_name}_{fittedModelName}_{str(hash(key))}.sp"
+        self.spice_file.parent.mkdir(exist_ok=True)
 
-        vf.write_spice_subcircuit_s(spice_file, self.instance_name)
-        self.inner_circuit = open(spice_file).read()
+        vf.write_spice_subcircuit_s(self.spice_file, self.instance_name)
+        self.inner_circuit = open(self.spice_file).read()
 
         if cached:
-            os.remove(spice_file)
+            os.remove(self.spice_file)
+        else:
+            self.create_plots(netw, vf)
+
+    def plot_both_traces(self, orig: rf.Network, fitted: rf.Network, tpl, ax):
+        fitted.plot_s_db(tpl[0], tpl[1], ax=ax)
+        orig.plot_s_db(tpl[0], tpl[1], ax=ax, linestyle='dashed')
+
+
+    def create_plots(self, original: rf.Network, fitted: rf.VectorFitting):
+        
+        fitted_s = np.zeros((len(original), 6,6), dtype=complex)
+
+        for i in range(6):
+            for j in range(6):
+                fitted_s[:,i,j] = fitted.get_model_response(i,j, freqs=original.f)
+
+        fitted_netw = rf.Network(frequency=original.frequency, s=fitted_s, name="fitted")
+
+        fig, ax = plt.subplots(2, 2)
+        fig.set_size_inches(12, 8)
+        
+        for i in range(6):
+            current_ax = ax[0,0] if i < 4 else ax[0, 1]
+            self.plot_both_traces(original, fitted_netw, (i, i), current_ax)
+
+        for t0, t1 in [(1,5), (2,6), (3,5), (4,6)]:
+            self.plot_both_traces(original, fitted_netw, (t0-1, t1-1), ax[1,0])
+
+        for t0, t1 in [(3,1), (4,2)]:
+            self.plot_both_traces(original, fitted_netw, (t0-1, t1-1), ax[1,1])
+
+        file = self.spice_file.with_suffix('.png')
+        fig.savefig(file)
+
+
 
     @abstractproperty
     def port_names(self) -> List[str]:
