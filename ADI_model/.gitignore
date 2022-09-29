@@ -1,5 +1,6 @@
 #ADI Model Specific Ignores
 data/
+tmp_vectorfit/
 gif/
 zcable*
 cable.p

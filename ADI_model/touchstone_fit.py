@@ -10,6 +10,7 @@ from typing import List
 
 from abc import ABC, abstractproperty
 import os
+from pathlib import Path
 
 import skrf as rf
 
@@ -68,7 +69,9 @@ class TouchstoneFit(ABC):
             cached = True
             vf = vectorfit_cache[key]
 
-        spice_file = f"fitted_{instance_name}_{fittedModelName}_{str(hash(key))}.sp"
+        spice_file = Path("tmp_vectorfit") / f"fitted_{instance_name}_{fittedModelName}_{str(hash(key))}.sp"
+        spice_file.parent.mkdir(exist_ok=True)
+
         vf.write_spice_subcircuit_s(spice_file, self.instance_name)
         self.inner_circuit = open(spice_file).read()
 
