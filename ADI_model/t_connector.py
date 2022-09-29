@@ -5,17 +5,9 @@
 #The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 #THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import re
-import sys
-from os import listdir
-from os.path import dirname
-import os.path 
-import shutil
-import argparse
-import time
-import random
-import numpy as np
-import math
+from typing import List
+
+from touchstone_fit import TouchstoneFit
 
 class T_connector(object):
     """Object representing a mixing segment trunk termination
@@ -79,6 +71,22 @@ class T_connector(object):
                     self.node_port, self.node_port,
                     self.name
                 )
+
+
+class TouchstoneT_Connector(TouchstoneFit):
+    n_ports = 6
+
+    def __init__(self, config: dict, number: int, port1: str, port2: str, node_port: str):
+        super().__init__(config["touchstone"],config["fitted_model_name"], config["fitting_error_rms"], f"tee{number}", config["port_order"])
+
+        self.port1 = port1
+        self.port2 = port2
+        self.node_port = node_port
+
+    @property
+    def port_names(self) -> List[str]:
+        return [self.port1, self.port1, self.port2, self.port2, self.node_port, self.node_port]
+
 
 if __name__ == '__main__':
     t0 = Termination(name="t0",port="t0", stim_port="ts")
