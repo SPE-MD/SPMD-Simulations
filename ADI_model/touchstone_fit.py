@@ -97,21 +97,27 @@ class TouchstoneFit(ABC):
 
         fitted_netw = rf.Network(frequency=original.frequency, s=fitted_s, name="fitted")
 
-        fig, ax = plt.subplots(2, 2)
-        fig.set_size_inches(12, 8)
-        
-        for i in range(6):
-            current_ax = ax[0,0] if i < 4 else ax[0, 1]
-            self.plot_both_traces(original, fitted_netw, (i, i), current_ax)
+        with plt.style.context(os.path.join(rf.data.pwd, "skrf.mplstyle")):
+            fig, axes = plt.subplots(2, 2)
+            fig.set_size_inches(12, 8)
+            
+            axes[0,0].set_title("Return Loss Trunk")
+            axes[0,1].set_title("Return Loss Node")
+            for i in range(6):
+                current_ax = axes[0,0] if i < 4 else axes[0, 1]
+                self.plot_both_traces(original, fitted_netw, (i, i), current_ax)
 
-        for t0, t1 in [(1,5), (2,6), (3,5), (4,6)]:
-            self.plot_both_traces(original, fitted_netw, (t0-1, t1-1), ax[1,0])
+            axes[1,0].set_title("Insertion Loss Trunk - Node")
+            for t0, t1 in [(1,5), (2,6), (3,5), (4,6)]:
+                self.plot_both_traces(original, fitted_netw, (t0-1, t1-1), axes[1,0])
 
-        for t0, t1 in [(3,1), (4,2)]:
-            self.plot_both_traces(original, fitted_netw, (t0-1, t1-1), ax[1,1])
+            axes[1,1].set_title("Insertion Loss Trunk - Trunk")
+            for t0, t1 in [(3,1), (4,2)]:
+                self.plot_both_traces(original, fitted_netw, (t0-1, t1-1), axes[1,1])
 
-        file = self.spice_file.with_suffix('.png')
-        fig.savefig(file)
+            fig.tight_layout()
+            file = self.spice_file.with_suffix('.png')
+            fig.savefig(file)
 
 
 
