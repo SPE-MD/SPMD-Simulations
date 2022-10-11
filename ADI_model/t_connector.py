@@ -5,11 +5,65 @@
 #The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 #THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+from abc import ABC, abstractmethod
+from tkinter.messagebox import NO
 from typing import List
 
 from touchstone_fit import TouchstoneFit
 
-class T_connector(object):
+
+class AbstractT_Connector(ABC):
+
+    @abstractmethod
+    def subcircuit(self) -> str:
+        pass
+
+    @abstractmethod
+    def instance(self) -> str:
+        pass
+
+    @staticmethod
+    def get(number: int = 1, 
+            port1: str = "t1b", 
+            port2: str = "t2a", 
+            node_port: str = 'y1',
+            config: dict = None
+            ) -> "AbstractT_Connector":
+        """Returns either a generic or touchstone based T connector 
+           depending on the configuration.
+
+        Args:
+            number: Tee/Node number. Defaults to 1.
+            port1: Name of Trunk 1 port. Defaults to "t1b".
+            port2: Name of Trunk 2 port. Defaults to "t2a".
+            node_port: Name of node port. Defaults to 'y1'.
+            config: Configuration data from json. Defaults to None.
+
+        Returns:
+            Instance of either TouchstoneT_Connector or T_Connector, 
+            depending if a touchstone file is available.
+        """
+
+        if config["tee"]["touchstone"]:
+            return TouchstoneT_Connector(
+                config["tee"],
+                number,
+                port1,
+                port2,
+                node_port
+            )
+        else:
+            return T_connector(
+                number,
+                port1,
+                port2,
+                node_port,
+                lcomp       = config['node_descriptions'][number]['lcomp'],
+                lcomp_match = config['node_descriptions'][number]['lcomp_match']
+            )
+
+
+class T_connector(AbstractT_Connector):
     """Object representing a mixing segment trunk termination
 
     name            name of the cable segment.  This will be the name of the instance and the subcircuit
@@ -73,7 +127,7 @@ class T_connector(object):
                 )
 
 
-class TouchstoneT_Connector(TouchstoneFit):
+class TouchstoneT_Connector(TouchstoneFit, AbstractT_Connector):
     n_ports = 6
 
     def __init__(self, config: dict, number: int, port1: str, port2: str, node_port: str):

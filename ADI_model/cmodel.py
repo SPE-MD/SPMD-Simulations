@@ -41,7 +41,7 @@ from node import Node as Node
 from termination import Termination as Termination
 from transmitter import Transmitter as Transmitter
 from trunk import Trunk as Trunk
-from t_connector import T_connector, TouchstoneT_Connector
+from t_connector import T_connector, TouchstoneT_Connector, AbstractT_Connector
 from dme import dme_transmitter as dme_transmitter
 from dme import eye_diagram 
 from dme import dme_receiver
@@ -652,24 +652,13 @@ if __name__ == '__main__':
     while(trunk_temp):
         port = "y%d" % node_iter
         #see if there is a unique node description in the json data
-
-        if config["tee"]["touchstone"]:
-            tee = TouchstoneT_Connector(
-                config["tee"]
-                , number=node_iter
-                , port1=mixing_segment[-1].port2
-                , port2=trunk_temp[0].port1
-                , node_port=port
-                )
-        else:
-            tee = T_connector(
-                    number=node_iter
-                    , port1=mixing_segment[-1].port2
-                    , port2=trunk_temp[0].port1
-                    , node_port=port
-                    , lcomp       = config['node_descriptions'][node_iter]['lcomp']
-                    , lcomp_match = config['node_descriptions'][node_iter]['lcomp_match']
-                    )
+        tee = AbstractT_Connector.get(
+            number=node_iter, 
+            port1=mixing_segment[-1].port2, 
+            port2=trunk_temp[0].port1,
+            node_port=port,
+            config=config
+            )
 
         node_iter+=1
         #put a t-connector on the mixing segment
@@ -687,22 +676,15 @@ if __name__ == '__main__':
     #print("cond2: %s" % cond2)
     if( cond1 or cond2 ):
         port = "y%d" % node_iter
-        if config["tee"]["touchstone"]:
-            tee = TouchstoneT_Connector(
-                config["tee"]
-                , number=node_iter
-                , port1=mixing_segment[-1].port2
-                , port2="end"
-                , node_port=port
-                )
-        else:
-            tee = T_connector(
-                    number=node_iter
-                    ,port1=mixing_segment[-1].port2
-                    ,port2="end"
-                    ,node_port=port
-                    ,lcomp=config['node_descriptions'][node_iter]['lcomp']
-                    )
+
+        tee = AbstractT_Connector.get(
+            number=node_iter, 
+            port1=mixing_segment[-1].port2, 
+            port2="end",
+            node_port=port,
+            config=config
+            )
+
         node_iter+=1
         mixing_segment.append(tee)
  
