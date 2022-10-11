@@ -5,14 +5,12 @@
 #The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 #THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import re
 import sys
 from os import listdir
 from os.path import dirname
 import os.path 
 import shutil
 import argparse
-import time
 import random
 import numpy as np
 #from scipy.signal import butter, lfilter, freqz
@@ -41,9 +39,8 @@ from node import Node as Node
 from termination import Termination as Termination
 from transmitter import Transmitter as Transmitter
 from trunk import Trunk as Trunk
-from t_connector import T_connector, TouchstoneT_Connector, AbstractT_Connector
+from t_connector import AbstractT_Connector
 from dme import dme_transmitter as dme_transmitter
-from dme import eye_diagram 
 from dme import dme_receiver
 
 def _readTxt(infile):
