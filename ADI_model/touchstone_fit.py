@@ -25,12 +25,25 @@ class TouchstoneFit(ABC):
     def __init__(
         self,
         touchstone_file: str,
-        fittedModelName: str,
+        fitted_model_name: str,
         fitting_error: float,
         instance_name: str = "",
         port_order: List[int] = None,
         max_poles: int = 30,
     ):
+        """_summary_
+
+        Args:
+            touchstone_file: Path to sNp File
+            fitted_model_name: Name of the resulting spice model
+            fitting_error: Allowed fitting error
+            instance_name: Spice instance name. Defaults to "".
+            port_order: Port order of the sNp file. Defaults to None which results in [0...N-1]
+            max_poles: Maximum number of poles used for fitting. Defaults to 30.
+
+        Raises:
+            RuntimeError: Unable to fit data
+        """
 
         self.instance_name = instance_name
         self.port_order = port_order if port_order else list(range(self.n_ports))
@@ -43,7 +56,7 @@ class TouchstoneFit(ABC):
             len(self.port_order) == self.n_ports
         ), f"port_order has to be of length {self.n_ports} or None"
 
-        key = (touchstone_file, fittedModelName, fitting_error)
+        key = (touchstone_file, fitted_model_name, fitting_error)
 
         if instance_name:
             self.instance_name = instance_name
@@ -71,7 +84,7 @@ class TouchstoneFit(ABC):
             cached = True
             vf = vectorfit_cache[key]
 
-        self.spice_file = Path("tmp_vectorfit") / f"fitted_{instance_name}_{fittedModelName}_{str(hash(key))}.sp"
+        self.spice_file = Path("tmp_vectorfit") / f"fitted_{instance_name}_{fitted_model_name}_{str(hash(key))}.sp"
         self.spice_file.parent.mkdir(exist_ok=True)
 
         vf.write_spice_subcircuit_s(self.spice_file, self.instance_name)
@@ -83,11 +96,25 @@ class TouchstoneFit(ABC):
             self.create_plots(netw, vf)
 
     def plot_both_traces(self, orig: rf.Network, fitted: rf.Network, tpl, ax):
+        """Comparison of on trace for sNp data and vector fitted touchstone
+
+        Args:
+            orig: Network trace from sNp file
+            fitted: Fitted Network trace
+            tpl: Port tuple to plot
+            ax: Matplotlib axes to plot into
+        """
         fitted.plot_s_db(tpl[0], tpl[1], ax=ax)
         orig.plot_s_db(tpl[0], tpl[1], ax=ax, linestyle='dashed')
 
 
     def create_plots(self, original: rf.Network, fitted: rf.VectorFitting):
+        """Comparison plot for sNp data and vector fitted touchstone
+
+        Args:
+            original: Original Touchstone data
+            fitted: Vector fitted data
+        """
         
         fitted_s = np.zeros((len(original), 6,6), dtype=complex)
 
@@ -135,9 +162,19 @@ class TouchstoneFit(ABC):
         return "\n".join(s)
 
     def subcircuit(self) -> str:
+        """Spice Subcircuit
+
+        Returns:
+            The subcircuit as string
+        """
         return self.inner_circuit
 
     def instance(self) -> str:
+        """Spice Instance
+
+        Returns:
+            The instance as string        
+        """
         port_tpl = list(zip(self.port_order, self.port_names))
 
         port_tpl.sort()

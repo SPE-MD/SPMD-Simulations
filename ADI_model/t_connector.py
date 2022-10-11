@@ -77,7 +77,21 @@ class TouchstoneT_Connector(TouchstoneFit):
     n_ports = 6
 
     def __init__(self, config: dict, number: int, port1: str, port2: str, node_port: str):
-        super().__init__(config["touchstone"],config["fitted_model_name"], config["fitting_error_rms"], f"tee{number}", config["port_order"])
+        """Create a T Connector from Touchstone data
+
+        Args:
+            config: Configuration dictionary loaded from json
+            number: Index of the T Connector
+            port1: Trunk Input Port name
+            port2: Trunk Output Port name
+            node_port: Node Port name
+        """
+        super().__init__(
+            config["touchstone"],
+            config["fitted_model_name"], 
+            config["fitting_error_rms"], 
+            f"tee{number}", 
+            config["port_order"])
 
         self.port1 = port1
         self.port2 = port2
@@ -85,6 +99,11 @@ class TouchstoneT_Connector(TouchstoneFit):
 
     @property
     def port_names(self) -> List[str]:
+        """Get the list of Port names
+
+        Returns:
+            list of Port names 
+        """
         return [self.port1, self.port1, self.port2, self.port2, self.node_port, self.node_port]
 
 
