@@ -265,13 +265,13 @@ class dme_signal(object):
         #unwind the equations above to find Vrms noise levels per fft step (noise in 20kHz por ejemplo) 
         #noise as Vrms/Hz should be integrated as a root-sum-square to get final Vrms value
         #what is the factor of 1.83? I found it empirically.
-        #1.83 = 10**(5.25/20) =  what is 5.25??
+        #1.83 = 10**(5.25/20) =  what is 5.25?? 
         nl_f = 1.83*np.sqrt(noise_bandwidth) * 10 ** ((noise_dBm_per_hz + 10*np.log10(df) - 30 + 10*np.log10(50))/(20)) 
         #(10*np.log10(np.abs(V)**2/50) + 30 - 10*np.log10(df*40e6)))
         #10**(-71/20) * 10**(10*log10(df))
         #nl_f = np.sqrt(df*1.99e-5)
-        print(nl_f)
-        print(df)
+        #print(nl_f)
+        #print(df)
 
         #generate an array of random phases
         ph  = np.random.uniform(0,2*np.pi,len(self.fft_freq))
@@ -304,7 +304,7 @@ class dme_signal(object):
         #                )
 
         n_t = np.fft.irfft(self.noise)
-        print("Rms Noise: %e" % np.std(n_t))
+        #print("Rms Noise: %e" % np.std(n_t))
         #with open("noise_%d.txt" % self.node.number, 'w') as out:
         #    for x in n_t:
         #        out.write("%.12e\n" % x)
@@ -376,11 +376,6 @@ class dme_signal(object):
         #plt.set_xscale("log")
         #dBm = 20*log10(Vrms) - 10*log10(R) + 10*log10(1/0.001)
         df=self.fft_freq[1]-self.fft_freq[0]
-        #print(20*np.log10(np.abs(self.fft_filtered[1])))
-        #print(10*np.log10(50))
-        #print(10*np.log10(1/0.001))
-        #print(10*np.log10(df))
-        #plt.plot(self.fft_freq[1:], 20*np.log10(np.abs(self.fft_filtered[1:])) - 10*np.log10(50) - 10*np.log10(40e6))
         plt.plot(self.fft_freq[1:], (10*np.log10(np.abs(self.fft_filtered[1:])**2/50) +30 - 10*np.log10(40e6) - 10*np.log10(df)))
         plt.plot(self.fft_freq[1:], (10*np.log10(np.abs(self.noise[1:])**2/50)        +30 - 10*np.log10(40e6) - 10*np.log10(df)))
         plt.plot(self.fft_freq[1:], self.tx_psd_upper_limit(self.fft_freq[1:]))

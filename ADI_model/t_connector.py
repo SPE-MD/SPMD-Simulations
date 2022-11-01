@@ -34,7 +34,7 @@ class T_connector(object):
         self.port1 = port1
         self.port2 = port2
         self.node_port = node_port
-        self.rconn=0.010
+        self.rconn=0.050
         self.lcomp=lcomp
         self.lcomp_match = lcomp_match
 
