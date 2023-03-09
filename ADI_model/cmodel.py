@@ -1085,11 +1085,11 @@ if __name__ == '__main__':
     if('tx_filter' in config and config['tx_filter']['plot']):
         config['tx_filter_png'] = os.path.join("data",design_md5,"img",'tx_filter.png') 
         dme_tx.plot_filter(config['tx_filter_png'],title="tx_filter")
+        dme_tx.t_domain_filtered = np.fft.irfft(dme_tx.get_filtered_fft())
 
     if(0): #used to check / debug sampling data externally
         dme_tx.output_pwl_to_file()
         dme_tx.output_sampled_pwl_to_file()
-        dme_tx.t_domain_filtered = np.fft.irfft(dme_tx.get_filtered_fft())
         dme_tx.output_t_domain_to_file()
         #exit(1)
 
@@ -1128,6 +1128,11 @@ if __name__ == '__main__':
 
         rx = dme_receiver(n, dme_tx, imgDir)
         receivers.append(rx)
+
+        #gain to beginning and end terminations from each node
+        #calculating this number is difficult for the nodes that are not the
+        #transmitter, need to do network math to derive gain after knowing all
+        #of the complex impedances
         rx.add_transfer_function(term1_gain, 'node/term1')
         rx.add_transfer_function(term2_gain, 'node/term2')
 
@@ -1143,11 +1148,6 @@ if __name__ == '__main__':
         rx.add_white_noise(-101, 40e6)
         rx.rx_fft(fft_out)
 
-        #filter debug plot enabled in json file
-        if('rx_filter' in config['node_descriptions'][node.number] and
-                config['node_descriptions'][node.number]['rx_filter']['plot']):
-            rx.output_filter_to_file()
-            rx.output_t_domain_to_file()
 
         #insert new rx object here...
         #run correlations 
@@ -1165,12 +1165,19 @@ if __name__ == '__main__':
         min_corr_value_list.append(rx.min_corr_value)
         #eye_data_mdi.append(rx.eye_mdi)
         eye_data_filtered.append(rx.eye_filtered)
-        rx_filter_png = os.path.join("data",design_md5,"img","rx_filter_%d.png" % rx.node.number) 
-        rx_fft_png    = os.path.join("data",design_md5,"img","rx_fft_%d.png"    % rx.node.number) 
-        rx_tf_png     = os.path.join("data",design_md5,"img","rx_tf_%d.png"     % rx.node.number) 
-        rx.plot_filter(rx_filter_png,title="rx_filter - Node %d" % rx.node.number)
-        rx.plot_fft(rx_fft_png,title="rx_fft - Node %d" % rx.node.number)
-        rx.plot_transfer_functions(filename=rx_tf_png, title="Gain to terminations node %d" % rx.node.number)
+
+        #filter debug plot enabled in json file
+        if('rx_filter' in config['node_descriptions'][node.number] and
+                config['node_descriptions'][node.number]['rx_filter']['plot']):
+            rx.output_filter_to_file()
+            rx.output_t_domain_to_file()
+
+            rx_filter_png = os.path.join("data",design_md5,"img","rx_filter_%d.png" % rx.node.number) 
+            rx_fft_png    = os.path.join("data",design_md5,"img","rx_fft_%d.png"    % rx.node.number) 
+            rx_tf_png     = os.path.join("data",design_md5,"img","rx_tf_%d.png"     % rx.node.number) 
+            rx.plot_filter(rx_filter_png,title="rx_filter - Node %d" % rx.node.number)
+            rx.plot_fft(rx_fft_png,title="rx_fft - Node %d" % rx.node.number)
+            rx.plot_transfer_functions(filename=rx_tf_png, title="Gain to terminations node %d" % rx.node.number)
 
     print("Sampling Period: %.3fns" % (1/Fs*1e9))
     #except Exception as e:

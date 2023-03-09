@@ -25,12 +25,12 @@
     "plot_png_filename" : "zcable.png",
     "tx_filter" : {
         "comment"  : "list of filters to apply to the transmitted data",
-        "plot" : false,
+        "plot" : true,
         "filters" : [
             {
                 "filter_type" : "lpf",
                 "cutoff" : 20e6,
-                "order" : 2
+                "order" : 1
             }
         ]
     },
