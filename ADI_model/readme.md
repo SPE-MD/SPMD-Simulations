@@ -1,4 +1,4 @@
-#ADI Consensus Model Readme
+# ADI Consensus Model Readme
 
 This model will reproduce simulation results displayed in SPMD_Potterf_Paul_Consensus_Mixing_Segment_Model_2021-03-24.pdf
 
