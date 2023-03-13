@@ -153,7 +153,7 @@ class analog_filter_s_domain(object):
             return fft
 
         Wcutoff = (2*math.pi*self.cutoff)
-        filtered = np.ones_like(fft,dtype=np.complex)
+        filtered = np.ones_like(fft,dtype=complex)
         for i,freq in enumerate(fft_freq):
             if(freq == 0):
                 filtered[i] = complex(1e-30,0)
@@ -172,7 +172,7 @@ class analog_filter_s_domain(object):
             return fft
 
         Wcutoff = (2*math.pi*self.cutoff)
-        filtered = np.ones_like(fft, dtype=np.complex)
+        filtered = np.ones_like(fft, dtype=complex)
         for i,freq in enumerate(fft_freq):
                 w = freq * (2*math.pi)
                 h=complex(1,0)
@@ -209,7 +209,7 @@ class dme_signal(object):
 
     def add_filter(self,filter_type="lpf",cutoff=20e6,order=1):
         if(len(self.filter)==0):
-            self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
+            self.filter = np.ones_like(self.fft_freq,dtype=complex)
             print("#Creating Filter Container")
         self.filters.append(analog_filter_s_domain(filter_type, cutoff, order))
         self.filter = self.filters[-1].filter_fft(self.fft_freq, self.filter)
@@ -311,10 +311,10 @@ class dme_signal(object):
 
 
     def get_filtered_fft(self):
-        #self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
+        #self.filter = np.ones_like(self.fft_freq,dtype=complex)
         #for f in self.filters:
         #    self.filter = f.filter_fft(self.fft_freq, self.filter)
-        self.fft_filtered = np.ones_like(self.fft_freq,dtype=np.complex)
+        self.fft_filtered = np.ones_like(self.fft_freq,dtype=complex)
         for i in range(self.filter.size):
             self.fft_filtered[i] = self.fft_value[i] * self.filter[i]
         return self.fft_filtered
@@ -417,7 +417,7 @@ class dme_transmitter(dme_signal):
         self.tstop=ts*ns 
 
         self._generateRandomBits()
-        self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
+        self.filter = np.ones_like(self.fft_freq,dtype=complex)
 
     def _generateRandomBits(self):
         self.pattern = np.random.randint(2,size=self.n_symbols)
@@ -492,7 +492,7 @@ class dme_receiver(dme_signal):
         self.imgDir = imgDir #directory for graph outputs
 
         self.fft_freq = dme_transmitter.fft_freq
-        self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
+        self.filter = np.ones_like(self.fft_freq,dtype=complex)
         self.t_domain_mdi      = None
         self.t_domain_filtered = None
 
