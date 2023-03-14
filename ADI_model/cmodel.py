@@ -1170,8 +1170,8 @@ if __name__ == '__main__':
         #filter debug plot enabled in json file
         if('rx_filter' in config['node_descriptions'][node.number] and
                 config['node_descriptions'][node.number]['rx_filter']['plot']):
-            rx.output_filter_to_file()
-            rx.output_t_domain_to_file()
+            rx.output_filter_to_file(filename=filterFile)
+            rx.output_t_domain_to_file(filename=filterFile)
 
             rx_filter_png = os.path.join("data",design_md5,"img","rx_filter_%d.png" % rx.node.number) 
             rx_fft_png    = os.path.join("data",design_md5,"img","rx_fft_%d.png"    % rx.node.number) 
