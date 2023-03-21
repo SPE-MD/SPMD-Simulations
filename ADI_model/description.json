@@ -16,7 +16,7 @@
     "seed" : "Specify a seed number for the random number generator.  Set to -1 for a random seed",
     "tx_node" : "Specify the node number to treat as the transmitting node",
     "attach_error" : "add gaussian error to attachment points.  Pass the the sigma value of the attachment error or 0 for no error.  Ignored for randomly placed nodes.  If 'attach_error' is set to a large value, can separation_min be violated? I don't know",
-    "attach_points" : "if a list of values is specified, other 
+    "attach_points" : "if a list of values is specified, other", 
     "noautoscale" : true,
     "noplot" : false,
     "plot_png_filename" : "zcable.png",
@@ -74,6 +74,13 @@
     "node_descriptions" : [],
     "trunk_description" : {
         "segments" : []
+    
+    },
+    "tee": {
+        "touchstone": "Path to touchstone file",
+        "fitting_error_rms": "Maximum acceptable fitting error, fitting is done by scikit-rf VectorFitting class.",
+        "port_order": "Port order for the touchstone file. Default [1,2,3,4,5,6] which translates to [in_p, in_n, out_p, out_n, node_p, node_n]",
+        "fitted_model_name": "A verbose name to identify the touchstone file"
     }
 
 }

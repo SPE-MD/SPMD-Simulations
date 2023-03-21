@@ -8,6 +8,7 @@ numpy = "*"
 matplotlib = "*"
 imageio = "*"
 scipy = "*"
+scikit-rf = ">=0.24"
 
 [dev-packages]
 
