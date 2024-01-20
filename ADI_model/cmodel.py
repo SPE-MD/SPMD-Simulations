@@ -26,7 +26,7 @@ import tempfile
 #from multiprocessing import Process
 
 
-sys.path.append(dirname(__file__)) #adds this file's director to the path
+sys.path.append(dirname(__file__)) #adds this file's director to the path9.3
 #import subprocess
 import runspice
 import mpUtil
@@ -67,7 +67,7 @@ def writeHtml(config, eye_data, min_corr_value):
         tailer_txt = _readTxt(os.path.join(config['htmlTemplates'],config['tailerHtml']))
         css_file = os.path.join(config['htmlTemplates'],config['cssFile'])
         try:
-            dst = os.path.join("data",config['design_md5'],config['cssFile'])
+            dst = os.path.join(config['dbfolder'],config['design_md5'],config['cssFile'])
             src = css_file
             shutil.copyfile(src, dst)
 
@@ -83,6 +83,10 @@ def writeHtml(config, eye_data, min_corr_value):
         html += "<p class=label>MinCorr=%.3f</p>" % (min_corr_value)
         html += "<p class=label>Nodes=%d</p>" % (config['nodes'])
         html += "<p class=label>Length=%.2f</p>" % (config['length'])
+        html += "<p class=label>Gauge=%s</p>" % (config['default_segment']['model'])
+        html += "<p class=label>Cnode=%g</p>" % (config['default_node']['cnode'])
+        html += "<p class=label>Lcomp=%g</p>" % (config['default_node']['lcomp'])
+        html += "<p class=label>Lpodl=%g</p>" % (config['default_node']['lpodl'])
         html += "</DIV>"
         html += "</DIV>"
 
@@ -123,8 +127,23 @@ def writeHtml(config, eye_data, min_corr_value):
         html += "</DIV>"
         html += "</DIV>"
 
-        html += "<HR>"
+        html += "<DIV class=content>"
+        html += "<DIV class=main>"
+        html += "<p class=label>%s</p>" % ("Receiver Measurements")
+        html += mpUtil.aoa2HtmlTable(config['rx_measurements'],name="Receiver Measurements",toggle=False)
+        html += "</DIV>"
+        html += "</DIV>"
 
+        html += "<DIV class=content>"
+        html += "<DIV class=main>"
+        html += "<p class=label>%s</p>" % ("Propagation Delay Between Nodes")
+        html += mpUtil.aoa2HtmlTable(config['aoaDelay'],name="Propagation Delay Between Nodes",toggle=False)
+        html += "</DIV>"
+        html += "</DIV>"
+
+        html += "<DIV class=content>"
+        html += "<DIV class=main>"
+        html += "<p class=label>%s</p>" % ("Node Eyes")
         html += "<table align=\"center\">"
         html += "<TR>"
         n=0
@@ -141,9 +160,12 @@ def writeHtml(config, eye_data, min_corr_value):
                 html += "</TR><TR>"
         html += "</TR>"
         html += "</table>"
+        html += "</DIV>"
+        html += "</DIV>"
+
         html += tailer_txt
 
-        htmlFile = os.path.join("data",config['design_md5'],'report.html')
+        htmlFile = os.path.join(config['dbfolder'],config['design_md5'],'report.html')
         f = open(htmlFile,"w")
         f.write(html)
         f.close()
@@ -197,6 +219,24 @@ def _il(x):
     else:
         return np.nan
 
+def insertion_loss_limit_proposed(freq):
+    il=[]
+    for x in freq:
+        il.append(_il_proposed(x))
+    return il
+
+def _il_proposed(x):
+
+    if(x < 0.3e6):
+        return np.nan 
+    elif(x < 10e6):
+        return -1*(1.0 + (1.6 * (x -  1e6)  / 9e6))
+    elif(x < 33e6):
+        return -1*(2.6 + (2.3 * (x - 10e6) / 23e6))
+    elif(x < 40e6):
+        return -1*(4.9 + (2.3 * (x - 33e6) / 33e6))
+    else:
+        return np.nan
 
 if __name__ == '__main__':
 
@@ -320,7 +360,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--noplot', action='store_true', help='set this flag to\
             prevent plotting')
-    
+
+    parser.add_argument('--whole_cable', action='store_true', help='set this flag to\
+            have the entire cable analyzed for correlation, otherwise only the\
+            node connections will be analyzed')
+ 
     parser.add_argument('--plot_png_filename', type=str, \
             help='Filename for plot image output as a .png file. Default is zcable.png',\
             #default=config_default['plot_png_filename']
@@ -351,11 +395,18 @@ if __name__ == '__main__':
             #default=config_default['attach_points']
             )
 
+    parser.add_argument('--dbfolder', type=str,\
+            help='specify the folder where results will be saved.  Default is the \'data/\' folder'
+            )
+
     parser.add_argument('--json', type=str, \
             help='specify a json file containing a system description',
             default=None
             )
 
+    parser.add_argument('--rtx', type=float, \
+            help='specify the transmitter\'s source impedance'
+            )
 
     args = parser.parse_args()
 
@@ -422,6 +473,8 @@ if __name__ == '__main__':
         config['attach_error']                = args.attach_error
     if args.attach_points:
         config['attach_points']               = args.attach_points
+    if args.dbfolder:
+        config['dbfolder']                    = args.dbfolder
     if args.drop_max:
         config['default_node']['drop_length'] = args.drop_max
     if args.random_drop:
@@ -436,7 +489,20 @@ if __name__ == '__main__':
         config['default_node']['rnode']       = args.rnode
     if args.noplot:
         config['noplot']                      = args.noplot
+    if args.rtx:
+        config['rtx']                         = args.rtx
 
+    if not "bit_per" in config: 
+        config["bit_per"] = 80e-9
+    if not "ns_exponent" in config: 
+        config["ns_exponent"] = 14
+    if not "prime" in config: 
+        config["prime"] = 617
+
+    if not "rtx" in config: 
+        config["rtx"] = 10000
+    if not "tx_amplitude" in config: 
+        config["tx_amplitude"] = 0.5
     if not "htmlTemplates" in config: 
         config["htmlTemplates"] = "htmlTemplates"
     if not "headerHtml" in config:
@@ -447,6 +513,11 @@ if __name__ == '__main__':
         config["cssFile"] = "promis.css"
     if not "corr_png_filename" in config:
         config["corr_png_filename"] = "corr.png"
+    if not "dbfolder" in config:
+        config["dbfolder"] = "data"
+    if not "wake_signal" in config:
+        config["wake_signal"] = False
+
     ################################################################################
     #Setup random seed in case this run has random parameters
     ################################################################################
@@ -467,10 +538,17 @@ if __name__ == '__main__':
     #make a list of nodes with 'default_node' configuration
     #then override node settings with specific node settings from the test specific json file
     ################################################################################
-    nds = []
+    #added this parameter late in development, so will not be in most json files
+    #set a default here...
+    if not "ccouple" in config['default_node']:
+        config['default_node']['ccouple'] = 220e-9
+
     #stick default node at index 0, I have no intention of it being accessed because node 
     #numbering starts at '1', but nds[0]==None bugs me.
+    nds = []
     nds.append(config['default_node'])
+    if not 'suffix' in config['default_node']:
+        config['default_node']['suffix'] = ["p","n"]
 
     #make a list of nodes with default configuration
     for i in range(1,config['nodes']+1):
@@ -649,6 +727,7 @@ if __name__ == '__main__':
         mixing_segment.append(term_start)
 
     node_iter=1
+    tee_connectors = []
     while(trunk_temp):
         port = "y%d" % node_iter
         #see if there is a unique node description in the json data
@@ -660,6 +739,7 @@ if __name__ == '__main__':
                 , lcomp       = config['node_descriptions'][node_iter]['lcomp']
                 , lcomp_match = config['node_descriptions'][node_iter]['lcomp_match']
                 )
+        tee_connectors.append(tee)
         node_iter+=1
         #put a t-connector on the mixing segment
         mixing_segment.append(tee)
@@ -685,6 +765,7 @@ if __name__ == '__main__':
                 )
         node_iter+=1
         mixing_segment.append(tee)
+        tee_connectors.append(tee)
  
     #attach the termination to the last piece of the mixing segment
     ccouple =  config['termination']['end']['ccouple']
@@ -704,6 +785,7 @@ if __name__ == '__main__':
     nodes = []
     for n in range(1,config['nodes']+1):
         port="y%d" % (n)
+        #print(config['node_descriptions'][n])
         node = Node(number=n
                 , port=port
                 , drop_length = config['node_descriptions'][n]['drop_length']
@@ -712,6 +794,8 @@ if __name__ == '__main__':
                 , lpodl       = config['node_descriptions'][n]['lpodl']
                 , rnode       = config['node_descriptions'][n]['rnode']
                 , spice_model = config['node_descriptions'][n]['spice_model']
+                , ccouple     = config['node_descriptions'][n]['ccouple']
+                , suffix      = config['node_descriptions'][n]['suffix']
                 )
         nodes.append(node)
         #print(node)
@@ -727,7 +811,7 @@ if __name__ == '__main__':
     tx_index=min(tx_node, config['nodes'])
     tx_index=max(tx_index, 1)
     tx_node = nodes[tx_index-1]
-    transmitter = Transmitter(port=tx_node.phy_port)
+    transmitter = Transmitter(port=tx_node.phy_port,rtx=config['rtx'])
 
 
 
@@ -789,6 +873,8 @@ if __name__ == '__main__':
                 shutil.copy("tlump2.p",circuitTempDirName)
                 zcable.write(".include node.p\n")
                 shutil.copy("node.p",circuitTempDirName)
+                zcable.write(".include lcomp.p\n")
+                shutil.copy("lcomp.p",circuitTempDirName)
             else:
                 for i in config['includes']:
                     if '.include' in i:
@@ -814,11 +900,12 @@ if __name__ == '__main__':
         zcable.write("vrtn rtn 0 0\n")
 
         #set up coherant sample parameters for the time domain data
-        bits_to_prime = [[13, 1253],[14,617],[15,313]]
-        Ns = 2**14
-        per = 80e-9
-        prime = 617
-        Fs = Ns / (prime * per)
+        bits_to_prime = [[13, 1253],[14,617],[15,313],[16,157]]
+        Ns = 2**config['ns_exponent']
+        #bit_per = 1/625e3 #160e-9
+        bit_per = config['bit_per']
+        prime = config['prime']
+        Fs = Ns / (prime * bit_per)
         
         #ac simulation command using coherant sample parameters
         zcable.write(".ac lin %d %.6g %.6g\n" % ((Ns/2), (Fs/Ns), Fs/2.))
@@ -827,6 +914,13 @@ if __name__ == '__main__':
         zcable.write(".save v(*) i(*)\n")
         for n in nodes:
             zcable.write("+ %s\n" % n.termination_current())
+        for i in range(1,len(trunk_segments)+1):
+            zcable.write("+ v(trunk%d:*)\n" % i)
+        zcable.write("+ %s\n" % term_end.termination_resistor_current())
+        zcable.write("+ %s\n" % term_start.termination_resistor_current())
+        zcable.write("+ %s\n" % mixing_segment[-2].port2_current())
+        zcable.write("+ %s\n" % mixing_segment[-2].port2_voltage()[0])
+        zcable.write("+ %s\n" % mixing_segment[-2].port2_voltage()[1])
 
 
 
@@ -845,17 +939,17 @@ if __name__ == '__main__':
     design_md5 = spi.md5(skipParams=False,skipComments=True,skipSave=False)
 
     #Create file names for all the files that go in the data directory
-    spiSave  = os.path.join("data",design_md5,design_md5+".spi")
-    logSave  = os.path.join("data",design_md5,design_md5+".log")
-    cirSave  = os.path.join("data",design_md5,design_md5+".cir")
-    rawSave  = os.path.join("data",design_md5,design_md5+".raw")
-    jsonSave = os.path.join("data",design_md5,design_md5+".json")
-    outputdb = os.path.join("data",design_md5)
-    imgDir   = os.path.join("data",design_md5,"img")
-    csvFile = os.path.join("data",design_md5,design_md5+".csv")
-    filterFile = os.path.join("data",design_md5,design_md5+"_filter.txt")
-    tDomainFile = os.path.join("data",design_md5,design_md5+"_t_domain.csv")
-    rlPlotFile = os.path.join("data",design_md5,design_md5+"_rl_plot.png")
+    spiSave  = os.path.join(config['dbfolder'],design_md5,design_md5+".spi")
+    logSave  = os.path.join(config['dbfolder'],design_md5,design_md5+".log")
+    cirSave  = os.path.join(config['dbfolder'],design_md5,design_md5+".cir")
+    rawSave  = os.path.join(config['dbfolder'],design_md5,design_md5+".raw")
+    jsonSave = os.path.join(config['dbfolder'],design_md5,design_md5+".json")
+    outputdb = os.path.join(config['dbfolder'],design_md5)
+    imgDir   = os.path.join(config['dbfolder'],design_md5,"img")
+    csvFile = os.path.join(config['dbfolder'],design_md5,design_md5+".csv")
+    filterFile = os.path.join(config['dbfolder'],design_md5,design_md5+"_filter.txt")
+    tDomainFile = os.path.join(config['dbfolder'],design_md5,design_md5+"_t_domain.csv")
+    rlPlotFile = os.path.join(config['dbfolder'],design_md5,design_md5+"_rl_plot.png")
     config['design_md5'] = design_md5
     
     #For debugging temp folder, pause here to inspect temp dir contents
@@ -863,11 +957,11 @@ if __name__ == '__main__':
 
 
     #print( design_md5)
-    if not os.path.exists("data"):
+    if not os.path.exists(config['dbfolder']):
         print( "Data Folder does not exist")
         print( "Creating...." )
         try:
-            os.makedirs("data")
+            os.makedirs(config['dbfolder'])
         except:
             print( "Cannot create data folder")
             exit(1)
@@ -897,6 +991,7 @@ if __name__ == '__main__':
 
     #Copy files from temp folder that we want to save
     shutil.copy(os.path.join(circuitTempDirName,"last_run.json"), outputdb)
+    shutil.copy(os.path.join(circuitTempDirName,"cable.p"), outputdb)
     
     print ("Opening csvFile",csvFile)
     with open(csvFile, 'w') as csv:
@@ -963,6 +1058,51 @@ if __name__ == '__main__':
                 csv_aoa.append(["#RL_node_%d" % tx_node.number]+sparams['s11'])
             csv_aoa.append(["#IL_node_%d" % n.number]+sparams['gain'])
 
+            gain_data = os.path.join(config['dbfolder'],design_md5,"gain.%d.txt" % n.number)
+            f0=-1
+            with open(gain_data, 'w') as tout:
+                for i in range(len(sparams['frequency'])):
+                        if(sparams['frequency'][i] < f0):
+                            print("\n")
+                        f0 = sparams['frequency'][i]
+                        tout.write("%9.5g %9.5g %9.5g\n" %
+                                (sparams['frequency'][i],sparams['gain'][i],sparams['zin_mag'][i]))
+
+
+
+    sparams = rf.scattering_parameters(
+                    tx_node.phy_port_voltage(),
+                    transmitter.transmitter_current(),
+                    #term_end.port_voltage(),
+                    #term_end.termination_resistor_current(),
+                    mixing_segment[-2].port2_voltage(),
+                    mixing_segment[-2].port2_current(),
+                    rin=50, rout=100)
+    #print(sparams['s21'])
+    #s11_plot.append(sparams['gain'])
+
+    rl_curves = []
+    for t in tee_connectors:
+            #sparams taken at each tci
+            z = rf.scattering_parameters(
+                    t.port1_voltage(),
+                    t.port1_current(),
+                    t.port2_voltage(),
+                    t.port2_current(),
+                    rin=100, rout=100)
+
+            rl_curves.append(-1*np.abs(z['s11']))
+            if(False):
+                tscat  = os.path.join(config['dbfolder'],design_md5,"tscat.%d.txt" % t.number)
+                print ("tscat = ", tscat)
+                f0=-1
+                with open(tscat, 'w') as tout:
+                    for i in range(len(z['frequency'])):
+                            if(z['frequency'][i] < f0):
+                                print("\n")
+                            f0 = z['frequency'][i]
+                            tout.write("%9.5g %9.5g %9.5g %9.5g %9.5g\n" % (z['frequency'][i],z['s11'][i],z['s11_phase'][i],z['s22'][i],z['s22_phase'][i]))
+
     ################################################################################
     #Write the csv file
     ################################################################################
@@ -1001,22 +1141,29 @@ if __name__ == '__main__':
         color_array.append('#%02X%02X%02X' % (int(red*255), int(green*255), int(blue*255)))  
 
     nyquist=Fs/2
-    print("nyquist = %.3e" % nyquist)
+    print("sample_rate = %.3e" % Fs)
+    print("nyquist     = %.3e" % nyquist)
     xmax=nyquist
-    xmax=40e6
+    #xmax=40e6
+    #xmax=100e6
 
-    rl_limit = return_loss_limit(frequency[0])
-    il_limit = insertion_loss_limit(frequency[0])
+    rl_limit   = return_loss_limit(frequency[0])
+    il_limit   = insertion_loss_limit(frequency[0])
+    il_limit_p = insertion_loss_limit_proposed(frequency[0])
 
     il_plot.plot(frequency[0], il_limit, label="clause 147 limit")  
+    il_plot.plot(frequency[0], il_limit_p, label="new limit")  
     il_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
     for i,p in enumerate(frequency):
-        il_plot.plot(frequency[i], s21_plot[i], label="test", color=color_array[i])  
+        #il_plot.plot(frequency[i], s21_plot[i], label="test", color=color_array[i])  
         cm_plot.plot(frequency[i], dm_cm_plot[i], label="test", color=color_array[i])  
+    il_plot.plot(frequency[0], s21_plot[-1], label="end", color='r')  
 
     rl_plot.xaxis.set_major_formatter(EngFormatter(unit = 'Hz'))
-    rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit")  
-    rl_plot.plot(frequency[0], s11_plot[0], label="test", color='k')  
+    rl_plot.plot(frequency[0], s11_plot[0], label=None, color='k')
+    for i,rl in enumerate(rl_curves):
+        rl_plot.plot(frequency[0], rl, label=None, color=color_array[i-1])
+    rl_plot.plot(frequency[0], rl_limit, label="clause 147 limit", color='k')  
     rl_plot.set_ylabel('RL (dB)')  
     rl_plot.set_xlim([0,xmax])
     rl_plot.legend(bbox_to_anchor=(0,1.02,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=2)  # Add a legend.
@@ -1036,7 +1183,7 @@ if __name__ == '__main__':
     if(config['noautoscale']):
         pass
         #network_plot.set_xlim([-1,101])
-    network_plot.set_ylim([-1,1])
+    network_plot.set_ylim([-0.3,0.3])
     network_plot.set_xlabel('Attach (m)') 
     network_plot.set_ylabel('Drop (m)')  
 
@@ -1074,17 +1221,30 @@ if __name__ == '__main__':
     # Time domain data / Eye Diagram Generation
     ################################################################################
     print("#Generating Random DME Signal")
-    dme_tx = dme_transmitter(ts=1/Fs,ns=Ns,symbol_period=80e-9,n_symbols=prime,amplitude=0.010,zin=sparams['zin'])
+    zmixing_segment = 50.0
+    voc = config['tx_amplitude'] * (zmixing_segment + config['rtx']) / zmixing_segment
+    itx = voc / config['rtx']
+    print("itx: = %.6f" % itx)
+    dme_tx = dme_transmitter(ts=1/Fs,ns=Ns,symbol_period=bit_per,n_symbols=prime,amplitude=itx,zin=sparams['zin'],wake_signal=config['wake_signal'])
+
+    dme_tx.t_domain_filtered = np.fft.irfft(dme_tx.get_filtered_fft())
+    dme_tx.output_tx_ifft_to_file()
+    dme_tx.output_t_domain_to_file()
 
     if('tx_filter' in config and 'filters' in config['tx_filter']):
+        print(config['tx_filter'])
         for f in config['tx_filter']['filters']:
             dme_tx.add_filter(filter_type=f['filter_type'],cutoff=f['cutoff'],order=f['order'])
     else:
         print("Fail")
         exit(1)
+
+    if('tx_filter' in config and 'rawfile' in config['tx_filter']):
+        print(config['tx_filter']['rawfile'])
+        dme_tx.add_filter_from_file(config['tx_filter']['rawfile'],node2='v(tx_filt)',node1='v(vp)')
     
     if('tx_filter' in config and config['tx_filter']['plot']):
-        config['tx_filter_png'] = os.path.join("data",design_md5,"img",'tx_filter.png') 
+        config['tx_filter_png'] = os.path.join(config['dbfolder'],design_md5,"img",'tx_filter.png') 
         dme_tx.plot_filter(config['tx_filter_png'],title="tx_filter")
         dme_tx.t_domain_filtered = np.fft.irfft(dme_tx.get_filtered_fft())
 
@@ -1095,12 +1255,17 @@ if __name__ == '__main__':
         #exit(1)
 
     #save the plot as a png file incase another script is making a gif
-    pspec_plot.set_ylabel('DME Input Spectrum')  # Add an y-label to the axes.
-    pspec_plot.plot(dme_tx.fft_freq,
-            20*np.log10(np.absolute(dme_tx.get_filtered_fft())),color=color_array[0])
-    pspec_plot.plot(dme_tx.fft_freq,
-            20*np.log10(np.absolute(dme_tx.fft_value)),color=color_array[1])
-    config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
+    #pspec_plot.set_ylabel('DME Input Spectrum')  # Add an y-label to the axes.
+    #pspec_plot.plot(dme_tx.fft_freq,
+    #        20*np.log10(np.absolute(dme_tx.get_filtered_fft())),color=color_array[0])
+    #pspec_plot.plot(dme_tx.fft_freq,
+    #        20*np.log10(np.absolute(dme_tx.fft_value)),color=color_array[1])
+    pspec_plot.set_ylabel('Transmitter Load Impedance')  # Add an y-label to the axes.
+    pspec_plot.plot(dme_tx.fft_freq, np.absolute(sparams['zin']) ,color='k')
+    pspec_plot.plot(dme_tx.fft_freq, np.absolute(sparams['zout']) ,color='r')
+    print("Median Transmit Load Impedance: %5.1f" % np.median(np.absolute(sparams['zin'])))
+    print("Mean Transmit Load Impedance: %5.1f" % np.mean(np.absolute(sparams['zin'])))
+    config['plot_png'] = os.path.join(config['dbfolder'],design_md5,"img",config['plot_png_filename']) 
     plt.savefig(config['plot_png'])
 
     print("#Generating Eye Diagrams")
@@ -1108,6 +1273,7 @@ if __name__ == '__main__':
     eye_data_filtered = []
     min_corr_value_list = []
     receivers = []
+    rx_measurements = []
     #try :
     unity_gain = np.ones_like(dme_tx.get_filtered_fft())
     for z,n in enumerate(nodes):
@@ -1127,7 +1293,7 @@ if __name__ == '__main__':
                 term_end.port_voltage(),
                 n.phy_port_voltage())
 
-        rx = dme_receiver(n, dme_tx, imgDir)
+        rx = dme_receiver(n.number, dme_tx, imgDir)
         receivers.append(rx)
 
         #gain to beginning and end terminations from each node
@@ -1142,9 +1308,6 @@ if __name__ == '__main__':
                 config['node_descriptions'][node.number]['rx_filter']):
             for f in config['node_descriptions'][node.number]['rx_filter']['filters']:
                 rx.add_filter(filter_type=f['filter_type'],cutoff=f['cutoff'],order=f['order'])
-                #rx.add_filter(filter_type="hpf",cutoff=500e3,order=1)
-                #rx.add_filter(filter_type="lpf",cutoff=15e6 ,order=1)
-                #rx.add_filter(filter_type="lpf",cutoff=30e6 ,order=1)
 
         rx.add_white_noise(-101, 40e6)
         rx.rx_fft(fft_out)
@@ -1163,6 +1326,15 @@ if __name__ == '__main__':
         rx.process_filtered_data()
         ################################################################################
 
+        ################################################################################
+        #terminal printout of extracted receive data
+        if(z==0):
+            rx_measurements.append(rx.processed_data_summary_label_list())
+            print(" ".join(rx_measurements[-1]))
+        rx_measurements.append(rx.processed_data_summary_list())
+        print(" ".join(rx_measurements[-1]))
+        ################################################################################
+
         min_corr_value_list.append(rx.min_corr_value)
         #eye_data_mdi.append(rx.eye_mdi)
         eye_data_filtered.append(rx.eye_filtered)
@@ -1173,12 +1345,38 @@ if __name__ == '__main__':
             rx.output_filter_to_file()
             rx.output_t_domain_to_file()
 
-            rx_filter_png = os.path.join("data",design_md5,"img","rx_filter_%d.png" % rx.node.number) 
-            rx_fft_png    = os.path.join("data",design_md5,"img","rx_fft_%d.png"    % rx.node.number) 
-            rx_tf_png     = os.path.join("data",design_md5,"img","rx_tf_%d.png"     % rx.node.number) 
-            rx.plot_filter(rx_filter_png,title="rx_filter - Node %d" % rx.node.number)
-            rx.plot_fft(rx_fft_png,title="rx_fft - Node %d" % rx.node.number)
-            rx.plot_transfer_functions(filename=rx_tf_png, title="Gain to terminations node %d" % rx.node.number)
+            rx_filter_png = os.path.join(config['dbfolder'],design_md5,"img","rx_filter_%d.png" % rx.node_number) 
+            rx_fft_png    = os.path.join(config['dbfolder'],design_md5,"img","rx_fft_%d.png"    % rx.node_number) 
+            rx_tf_png     = os.path.join(config['dbfolder'],design_md5,"img","rx_tf_%d.png"     % rx.node_number) 
+            if(True):
+                rx.plot_filter(rx_filter_png,title="rx_filter - Node %d" % rx.node_number)
+                rx.plot_fft(rx_fft_png,title="rx_fft - Node %d" % rx.node_number)
+                #rx.plot_transfer_functions(filename=rx_tf_png, title="Gain to terminations node %d" % rx.node_number)
+
+    config['rx_measurements'] = rx_measurements
+
+    ################################################################################
+    #terminal printout of extracted propagation delay by cable segment
+    print("\nPropagation Delay Between Nodes:")
+    aoaDelay = [["Segment","Length (m)","PropDly (ns)","Model","Zo","Prop Calc (ns)"]]
+    for i in range(0,len(receivers)-1):
+        l  = trunk_segments[i].length
+        t0 = receivers[i].receive_delay
+        t1 = receivers[i+1].receive_delay
+        pdelay = (t1-t0)/l
+        aoaDelay.append(
+                [
+                    "%d" % i,
+                    "%.3f" % l,
+                    "%.3f" % (pdelay*1e9),
+                    "%s" % trunk_segments[i].cableModel.name,
+                    "%.3f" % trunk_segments[i].Zo,
+                    "%.3f" % (trunk_segments[i].cableModel.propDly*1e9)
+                    ]
+                )
+    mpUtil.aoaPrint(aoaDelay)
+    config['aoaDelay'] = aoaDelay
+    ################################################################################
 
     print("Sampling Period: %.3fns" % (1/Fs*1e9))
     #except Exception as e:
@@ -1189,13 +1387,16 @@ if __name__ == '__main__':
         node_save = -1 #-1 means the last node
         pspec_plot.set_ylabel('DME Output Spectrum')  # Add an y-label to the axes.
         pspec_plot.plot(dme_tx.fft_freq, 20*np.log10(np.absolute(fft_out_list[node_save])),color=color_array[node_save])
-        config['plot_png'] = os.path.join("data",design_md5,"img",config['plot_png_filename']) 
+        config['plot_png'] = os.path.join(config['dbfolder'],design_md5,"img",config['plot_png_filename']) 
         plt.savefig(config['plot_png'])
 
     #saturation_level is the histogram / heatmap level that makes the heatmap eyediagrams saturate color.
     #Without this, the eye diagram gets normalized to the largest bin. This makes the sparse data hard to see.
     #The level is automatically set to 1/3 the zero crossing bin height of the input dme signal
     saturation_level = eye_data_filtered[0].zero_crossing_array[0]/3
+    if(saturation_level < 2):
+        saturation_level = 2
+    saturation_level = 3
     print("Saturation_level %d" % (saturation_level))
 
     eye1 = []
@@ -1250,7 +1451,7 @@ if __name__ == '__main__':
     eps[3].plot(trunk.attach_points, cross_time_min , 'o', label='min')
     eps[3].legend()
 
-    config['corr_png'] = os.path.join("data",design_md5,"img",config['corr_png_filename'])
+    config['corr_png'] = os.path.join(config['dbfolder'],design_md5,"img",config['corr_png_filename'])
     plt.savefig(config['corr_png'])
 
     print("Compiling Gif")
@@ -1264,7 +1465,7 @@ if __name__ == '__main__':
             loop.append(e.imgfile)
 
         images = []
-        gif_file = os.path.join("data",design_md5,"img",config['eye_gif_mdi'])
+        gif_file = os.path.join(config['dbfolder'],design_md5,"img",config['eye_gif_mdi'])
         for filename in loop:
             images.append(imageio.imread(filename))
         imageio.mimsave(gif_file, images)
@@ -1277,15 +1478,28 @@ if __name__ == '__main__':
 
     images = []
     config['eye_gif_filtered'] = 'eye_filtered.gif'
-    gif_file = os.path.join("data",design_md5,"img",config['eye_gif_filtered'])
+    gif_file = os.path.join(config['dbfolder'],design_md5,"img",config['eye_gif_filtered'])
     for filename in loop:
         images.append(imageio.imread(filename))
     imageio.mimsave(gif_file, images)
-
-
     ################################################################################
     # End Eye Diagram Generation
     ################################################################################
+
+    ################################################################################
+    # Output data from parameter sweeps
+    ################################################################################
+    #append min correlation for each node to a file
+    #use this file checking outputs during a parameter sweep
+    with open('corr2_filter.txt', 'a') as cout:
+        l0  = trunk_segments[0].length
+        l1=0
+        if(len(trunk_segments) > 1):
+            l1  = trunk_segments[1].length
+        cout.write("%.3f\t%.3f\t" % (l0,l1))
+        for c in min_corr_value_list:
+            cout.write("%.3f\t" % c)
+        cout.write("%s/%s\n" % (config['dbfolder'],design_md5))
 
     ################################################################################
     # Generate HTML output
@@ -1316,3 +1530,113 @@ if __name__ == '__main__':
 
         plt.savefig('rl_plot.png')
         plt.close(fig)
+
+    ################################################################################
+    ################################################################################
+    # Get eye diagrams for the whole cable
+    ################################################################################
+    ################################################################################
+    if(args.whole_cable):
+        receivers = []
+        eye_data_cable = []
+        min_corr_value_list = []
+        print(len(trunk_segments[0].node_names))
+        eye_plot_names = []
+        eye_stats = {
+                "length"        : config['length'],
+                "tx_index"      : tx_index,
+                "attach_points" : trunk.attach_points,
+                "color_array" : color_array,
+                "corr_avg" : [],
+                "corr_min" : [],
+                "eye_area_1" : [],
+                "eye_area_2" : [],
+                "crossing_width_1" : [],
+                "crossing_width_2" : [],
+                "delay" : [],
+                "crossing_time" : [],
+                "crossing_time_min" : [],
+                "crossing_time_max" : [],
+                "positions" : [],
+                "pattern_delay" : [],
+                }
+        p0 = 0
+        for t in trunk_segments:
+            for i,s in enumerate(t.node_names):
+                if(1):
+                    #multiply transmit fft by transfer function to node of interest
+                    fft_out = rf.fft_transfer(
+                            dme_tx.get_filtered_fft(),
+                            tx_node.phy_port_voltage(),
+                            s[0:2])
+
+                    p0 += s[2]
+                    eye_stats['positions'].append(p0)
+                    rx = dme_receiver(i, dme_tx, imgDir)
+                    receivers.append(rx)
+                    rx.add_white_noise(-101, 40e6)
+                    rx.rx_fft(fft_out)
+
+                    ##insert new rx object here...
+                    ##run correlations 
+                    ##hold eye data - show more than one eye (one for MDI eye
+                    ##diagram, one for rxfilter eye, another for correlated eye
+
+                    ################################################################################
+                    #these two functions overwrite some object variables that the other one sets
+                    #like min_corr_value.  
+                    #right now the order matters, maybe fix this in the future
+                    rx.process_mdi_data()
+                    #rx.process_filtered_data()
+                    #################################################################################
+
+                    min_corr_value_list.append(rx.min_corr_value)
+                    eye_data_cable.append(rx.eye_mdi)
+
+                    eye_stats['corr_avg'].append(rx.avg_corr_value)
+                    eye_stats['corr_min'].append(rx.min_corr_value)
+                    eye_stats['eye_area_1'].append(rx.eye_mdi.eye_area_1*1e9)
+                    eye_stats['eye_area_2'].append(rx.eye_mdi.eye_area_2*1e9)
+                    eye_stats['crossing_width_1'].append(rx.eye_mdi.crossing1_width*1e9)
+                    eye_stats['crossing_width_2'].append(rx.eye_mdi.crossing2_width*1e9)
+                    eye_stats['delay'].append(rx.eye_mdi.t_offset*1e9)
+                    eye_stats['crossing_time'].append(rx.eye_mdi.crossing_time*1e9)
+                    eye_stats['crossing_time_min'].append(rx.eye_mdi.crossing_time_min*1e9)
+                    eye_stats['crossing_time_max'].append(rx.eye_mdi.crossing_time_max*1e9)
+                    eye_stats['pattern_delay'].append(rx.pattern_delay*1e9)
+
+                else:
+                    imgfile = os.path.join(imgDir,"eye_mdi%d.png" % (i))
+                    eye_plot_names.append(imgfile)
+
+        print("Compiling Gif")
+        import imageio.v2 as imageio
+        loop = []
+
+        if(1):
+            i=0
+            for e in eye_data_cable[::4]:
+                #print("\r%05d / %05d" % (i, len(eye_data_cable)), end="")
+                imgfile = os.path.join(imgDir,"eye_mdi%d.png" % (i))
+                e.plot_reflections(saturation_level=saturation_level,
+                        filename=imgfile, eye_stats = eye_stats,
+                        index = i)
+                loop.append(e.imgfile)
+                i+=4
+            print("\ndone")
+            for e in reversed(eye_data_cable[::4]):
+                loop.append(e.imgfile)
+        else:
+            for e in eye_plot_names:
+                loop.append(e)
+            for e in reversed(eye_plot_names):
+                loop.append(e)
+
+        images = []
+        config['eye_gif_cable'] = 'eye_cable_20cm.gif'
+        gif_file = os.path.join(config['dbfolder'],design_md5,"img",config['eye_gif_cable'])
+        for filename in loop:
+            print("\r%s" % filename, end="")
+            images.append(imageio.imread(filename))
+        #imageio.mimsave(gif_file, images)
+        imageio.mimsave(gif_file, images, format='GIF', duration=0.1)

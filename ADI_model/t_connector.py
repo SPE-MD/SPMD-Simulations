@@ -34,9 +34,11 @@ class T_connector(object):
         self.port1 = port1
         self.port2 = port2
         self.node_port = node_port
-        self.rconn=0.050
+        self.rconn=0.025
+        self.lcomp_dcr=0.020 #42mOhm max
         self.lcomp=lcomp
         self.lcomp_match = lcomp_match
+        self.lcomp_srf=1440e6
 
     def subcircuit(self):
         """Generate the subcircuit definition for this cable segment"""
@@ -44,12 +46,34 @@ class T_connector(object):
 
         netlist.append(".subckt %s ip in op on np nn rtn" % (self.name))
 
+        cpar = 1/ (self.lcomp * (self.lcomp_srf * 2 * math.pi)**2)
         #generate the body of the cable
-        netlist.append("l1p ip p %g rser=%g" % (self.lcomp*(1+(self.lcomp_match/100.)), self.rconn))
-        netlist.append("l1n in n %g rser=%g" % (self.lcomp*(1-(self.lcomp_match/100.)), self.rconn))
-        netlist.append("l2p p op %g rser=%g" % (self.lcomp*(1+(self.lcomp_match/100.)), self.rconn))
-        netlist.append("l2n n on %g rser=%g" % (self.lcomp*(1-(self.lcomp_match/100.)), self.rconn))
+        netlist.append("r1p ip iip %g" % (self.rconn))
+        netlist.append("r1n in iin %g" % (self.rconn))
+        #netlist.append("l1p iip p %g rser=%g cpar=%g" % (self.lcomp*(1+(self.lcomp_match/100.)), self.lcomp_dcr, cpar))
+        #netlist.append("l1n iin n %g rser=%g cpar=%g" % (self.lcomp*(1-(self.lcomp_match/100.)), self.lcomp_dcr, cpar))
+        #netlist.append("l2p p oop %g rser=%g cpar=%g" % (self.lcomp*(1+(self.lcomp_match/100.)), self.lcomp_dcr, cpar))
+        #netlist.append("l2n n oon %g rser=%g cpar=%g" % (self.lcomp*(1-(self.lcomp_match/100.)), self.lcomp_dcr, cpar))
+        if(self.lcomp <= 1e-9):
+            netlist.append("rl1p iip p 68m")
+            netlist.append("rl1n iin n 68m")
+            netlist.append("rl2p p oop 68m")
+            netlist.append("rl2n n oon 68m")
+        else:
 
+            netlist.append("xsegi  iip iin iiip iiin rtn tlump params: lseg=2.1533e-08 rskin=1.13427e-05 cseg=2.1533e-12 rser=100n")
+            netlist.append("xl1p iiip iiiip coilcraft8085LS")
+            netlist.append("xl1n iiin iiiin coilcraft8085LS")
+            netlist.append("xsegii iiiip iiiin p n rtn tlump params: lseg=2.1533e-08 rskin=1.13427e-05 cseg=2.1533e-12 rser=100n")
+
+            netlist.append("xsegoo p n oooop oooon rtn tlump params: lseg=2.1533e-08 rskin=1.13427e-05 cseg=2.1533e-12 rser=100n")
+            netlist.append("xl2p oooop ooop coilcraft8085LS")
+            netlist.append("xl2n oooon ooon coilcraft8085LS")
+            netlist.append("xsego  ooop ooon oop oon rtn tlump params: lseg=2.1533e-08 rskin=1.13427e-05 cseg=2.1533e-12 rser=100n")
+
+        netlist.append("r2p oop op %g" % (self.rconn))
+        netlist.append("r2n oon on %g" % (self.rconn))
+        
         netlist.append("r3p p np %g" % self.rconn)
         netlist.append("r3n n nn %g" % self.rconn)
 
@@ -80,8 +104,26 @@ class T_connector(object):
                     self.name
                 )
 
+    def port1_current(self):
+        return "ix(%s:ip)" % (self.name)
+
+    def port2_current(self):
+        return "ix(%s:op)" % (self.name) 
+
+    def port1_voltage(self):
+        return [
+                "v(%sp)" % (self.port1),
+                "v(%sn)" % (self.port1)
+                ]
+
+    def port2_voltage(self):
+        return [
+                "v(%sp)" % (self.port2),
+                "v(%sn)" % (self.port2)
+                ]
+
 if __name__ == '__main__':
-    t0 = Termination(name="t0",port="t0", stim_port="ts")
+    t0 = T_connector(name="t0",port="t0", stim_port="ts")
     print(t0.subcircuit())
     print(t0.instance())
     print(t0.termination_resistor_current())#! /usr/bin/env python3

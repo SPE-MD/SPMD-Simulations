@@ -25,9 +25,10 @@ class Transmitter(object):
                     the connections at the port of this cable will then be called t1p and t1n
     """
 
-    def __init__(self, port="t0"):
+    def __init__(self, port="t0" ,rtx=10000):
         self.name = "iac"
         self.port = port
+        self.rtx = rtx
 
     def subcircuit(self):
         """Generate the subcircuit definition for this cable segment"""
@@ -45,10 +46,12 @@ class Transmitter(object):
 
     def instance(self):
         """Generate the instance call for this cable segment"""
-        return "%s %sp %sn 0 ac 1" % \
+        return "%s %sp %sn 0 ac 1\nrtx %sp %sn %g" % \
                 (
                     self.name,
                     self.port, self.port,
+                    self.port, self.port,
+                    self.rtx
                 )
 
     def transmitter_current(self):

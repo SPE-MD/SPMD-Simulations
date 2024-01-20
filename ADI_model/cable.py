@@ -35,6 +35,7 @@ class CableModel(object):
         self.c_m   = c / ref_length
         self.rdc   = rdc / ref_length
         self.Zo = math.sqrt(self.l_m / self.c_m)
+        self.propDly = math.sqrt(self.l_m * self.c_m) #per meter
 
     #returns a string of params suitable for appending to a spice subcircuit call
     #must pass the reference length for the cable segment
@@ -47,6 +48,7 @@ class CableModel(object):
 
         l_m    = self.l_m * (1+err)
         c_m    = self.c_m * (1-err)
+        self.propDly = math.sqrt(l_m * c_m) #per meter
 
         params = "params: lseg={%g} rskin={%g} cseg={%g} rser={%g}" % (
                 l_m        * length,
@@ -115,6 +117,7 @@ class Cable(object):
 
     def subcircuit(self):
         """Generate the subcircuit definition for this cable segment"""
+        self.node_names = []
         netlist = [self.__str__()]
 
         netlist.append(".subckt %s %04dp %04dn endp endn rtn" % 
@@ -125,10 +128,15 @@ class Cable(object):
 
         #generate the body of the cable
         for i in range(0,self.whole):
+            self.node_names.append(["v(%s:%04dp)" % (self.name,i+1),"v(%s:%04dn)" %
+                (self.name,i+1), self.max_seg_length])  
             netlist.append(self.__make_segment__(i, self.max_seg_length))
 
         #handle fractional segments
         if(self.part > 0):
+            #self.node_names.append(["%04dp" % i,"%04dn" % i])  
+            self.node_names.append(["v(%s:%04dp)" % (self.name,self.whole),"v(%s:%04dn)" %
+                (self.name,self.whole), self.max_seg_length*self.part])  
             netlist.append(self.__make_segment__(self.whole, self.part*self.max_seg_length))
 
 
@@ -141,7 +149,7 @@ class Cable(object):
             ,"* name    %s" % self.name
             ,"* Zo      %s" % self.Zo
             ,"* length  %s" % self.length
-            ,"* gauge    %s" % self.gauge
+            ,"* gauge   %s" % self.gauge
             ,"* seg_max %s" % self.max_seg_length
             ,"* nsegs   %f" % self.nsegs
             ,"* whole   %f" % self.whole

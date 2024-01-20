@@ -85,7 +85,7 @@ class Termination(object):
         return "%s:rp" % self.name
 
     def termination_resistor_current(self):
-        return "I(%s)" % self.termination_resistor()
+        return "i(%s)" % self.termination_resistor()
 
     def port_voltage(self):
         return [

@@ -31,8 +31,7 @@ class Node(object):
     """
 
     def __init__(self, number=0, port="t0", drop_length=0.0, drop_gauge=18,
-            spice_model="node", random_drop=False,
-            cnode=30e-12, lpodl=80e-6, rnode=10000):
+            spice_model="node", random_drop=False, cnode=30e-12, lpodl=80e-6, rnode=10000, ccouple=220e-9, suffix = ["p","n"]):
         self.name = "node%d" % number
         self.number = number
         self.port = port
@@ -47,6 +46,9 @@ class Node(object):
         self.cnode = cnode
         self.lpodl = lpodl
         self.rnode = rnode
+        self.ccouple = ccouple
+        self.suffixp = suffix[0]
+        self.suffixn = suffix[1]
 
     def subcircuit(self):
         """Generate the subcircuit definition for this node segment"""
@@ -69,6 +71,7 @@ class Node(object):
             ,"* cnode       %s" % self.cnode
             ,"* lpodl       %s" % self.lpodl
             ,"* rnode       %s" % self.rnode
+            ,"* ccouple     %s" % self.ccouple
             ,"************************"
             ]
         return "\n".join(s)
@@ -76,6 +79,7 @@ class Node(object):
     def instance(self):
         """Generate the instance call for this node and drop segment"""
         instance = []
+        #instantiate the drop
         instance.append("x%s %sp %sn node_%d_mdi_p node_%d_mdi_n rtn %s" % \
                 (
                     self.drop_name,
@@ -84,23 +88,34 @@ class Node(object):
                     self.drop_name
                 )
                 )
-        instance.append("x%s node_%d_mdi_p node_%d_mdi_n %sp %sn rtn %s params: cnode=%g lpodl=%g rnode=%g" % \
+        #instantiate the node
+        instance.append("x%s node_%d_mdi_p node_%d_mdi_n %s%s %s%s rtn %s params: cnode=%g lpodl=%g rnode=%g ccouple=%g" % \
                 (
                     self.name,
                     self.number, self.number,
-                    self.phy_port, self.phy_port,
+                    self.phy_port, self.suffixp,
+                    self.phy_port, self.suffixn,
                     self.spice_model,
                     self.cnode,
                     self.lpodl,
-                    self.rnode
+                    self.rnode,
+                    self.ccouple
                 )
                 )
         return "\n".join(instance)
 
     def phy_port_voltage(self):
         return [
-                "v(%sp)" % self.phy_port,
-                "v(%sn)" % self.phy_port,
+                "v(%s%s)" % (self.phy_port, self.suffixp),
+                "v(%s%s)" % (self.phy_port, self.suffixn)
+                ]
+    def mdi_port_current(self):
+        return "ix(%s:p)" % self.name
+
+    def mdi_port_voltage(self):
+        return [
+                "v(node_%d_mdi_p)" % self.number,
+                "v(node_%d_mdi_n)" % self.number,
                 ]
 
     def termination_current(self):

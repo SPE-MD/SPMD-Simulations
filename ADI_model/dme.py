@@ -16,8 +16,11 @@ import os.path
 sys.path.append(dirname(__file__)) #adds this file's director to the path
 import matplotlib.pyplot as pyplot
 from matplotlib.ticker import EngFormatter
+import matplotlib
 import mpUtil
+from ltcsimraw import ltcsimraw as ltcsimraw
 
+matplotlib.use('Agg') 
 #expects to be initialized with two (x,y) tuples
 #it then figures out y=mx+b from the points and returns
 # y when x is given
@@ -181,11 +184,34 @@ class analog_filter_s_domain(object):
                 filtered[i] = h * fft[i]
         return filtered
 
+class analog_filter_raw_file(object):
+    def __init__(self, rawfile, n2, n1):
+        rf=ltcsimraw(rawfile)
+        self.filter = rf.ac_gain(n1, n2)
+        #return self.av
+
+    def filter_fft(self, fft_freq, fft):
+
+        filtered = np.ones_like(fft, dtype=np.complex)
+        #print(self.filter['av'])
+        try:
+            for i,freq in enumerate(fft_freq):
+                if(freq == 0):
+                    pass
+                    #filtered[i] = complex(1e-30,0)
+                else:
+                    filtered[i] = self.filter['av'][i-1] * fft[i]
+        except Exception as e:
+            print(e)
+            print(i)
+        return filtered
+
 class dme_signal(object):
     def __init__(self):
         self.filters = []
         self.noise   = []
         self.transfer_functions = []
+        self.pattern_delay = 0
         #self.fft_value = []
         #self.fft_freq  = []
         #self.t_domain_mdi = None
@@ -213,6 +239,14 @@ class dme_signal(object):
             print("#Creating Filter Container")
         self.filters.append(analog_filter_s_domain(filter_type, cutoff, order))
         self.filter = self.filters[-1].filter_fft(self.fft_freq, self.filter)
+
+    def add_filter_from_file(self,rawfile=None,node2='n2',node1='n1'):
+        #print("HI!! FILTER FROM FILE")
+        if(len(self.filter)==0):
+            self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
+            print("#Creating Rawfile Filter Container")
+        self.filters.append(analog_filter_raw_file(rawfile,node2,node1))
+        self.filter = self.filters[-1].filter_fft(self.fft_freq,self.filter)
 
     def tx_psd_upper_limit(self,freq):
         lim = np.ones_like(freq)
@@ -327,35 +361,90 @@ class dme_signal(object):
 
     def process_data(self,t_domain,filename="eye"):
         #print(filename)
-        eye = eye_diagram(
+        self.eye = eye_diagram(
                 [t_domain],
                 [self.dme_transmitter],
                 self.symbol_period,
                 self.sample_period,
-                node_number=self.node.number,
+                node_number=self.node_number,
                 imgDir=self.imgDir,
                 filename=filename
                 )
 
-        min_corr_value_list = []
+        corr_value_list = []
         #for i in range(0,len(self.t_domain_filtered)):
-        self.corr_data_txt =  os.path.join(self.imgDir,("corr_data_%d.txt" % self.node.number))
-        dc = dme_correlator(t_domain, self.sample_period,
-                eye.t_offset, self.dme_transmitter, filename=self.corr_data_txt)
+        self.corr_data_txt =  os.path.join(self.imgDir,("corr_data_%d.txt" %
+            self.node_number))
+        dc = dme_correlator(t_domain, self.sample_period, symbol_period=self.symbol_period,
+                delay=self.eye.t_offset, dme_input=self.dme_transmitter, filename=self.corr_data_txt)
 
-        self.corrpng =  os.path.join(self.imgDir,("corr_node_%d.png" % self.node.number))
-        dc.plot_correlation(filename=self.corrpng, title=("Correlation Node %d" % self.node.number))
-        min_corr_value_list.append(dc.min_corr_value)
-        self.min_corr_value = np.amin(min_corr_value_list)
-        print("%2d %.6e %.6e %6.3fnV*s : %6.3fnV*s %5.3f" % (
-            self.node.number,
-            eye.crossing1_width,
-            eye.crossing2_width,
-            eye.eye_area_1*1e9,
-            eye.eye_area_2*1e9,
-            self.min_corr_value))
+        #match the tx and rx patterns and figure out the time delay to the pattern
+        self.pattern_offset_periods = self.find_pattern_delay(self.dme_transmitter.pattern,dc.recovered_bit_pattern)
+        self.pattern_delay = self.pattern_offset_periods['offset'] * self.symbol_period #+ eye.t_offset
+        #print(pattern_offset_periods['offset'] * 80e-9 + eye.t_offset)
 
-        return eye
+        self.corrpng =  os.path.join(self.imgDir,("corr_node_%d.png" %
+            self.node_number))
+        #dc.plot_correlation(filename=self.corrpng, title=("Correlation Node %d"
+        #    % self.node_number))
+        corr_value_list.append(dc.min_corr_value) #why putting this in a list?
+        self.min_corr_value = np.amin(corr_value_list)
+        self.avg_corr_value = dc.avg_corr_value #avg_corr_value being treated differently than min_corr_value
+        self.min_corr_period = dc.min_corr_period
+        self.receive_delay = self.eye.t_offset + self.pattern_delay + (self.symbol_period/2)
+        
+        return self.eye
+
+    def processed_data_summary_label_list(self):
+        return([
+            "%4s"  % "node",
+            "%10s" % "crossing1",
+            "%10s" % "crossing2",
+            "%9s"  % "eye_area1",
+            "%9s"  % "eye_area2",
+            "%8s"  % "min_corr",
+            "%8s"  % "avg_corr",
+            "%12s" % "min_corr_per",
+            "%9s"  % "o_periods",
+            "%10s" % "eye_offset",
+            "%13s" % "pattern_delay",
+            "%13s" % "receive_delay"
+            ]
+            )
+
+    def processed_data_summary_list(self):
+        return([
+            "%04d"    % self.node_number,
+            "%8.3fns" % (self.eye.crossing1_width*1e9),
+            "%8.3fns" % (self.eye.crossing2_width*1e9),
+            "%9.3f"   % (self.eye.eye_area_1*1e9),
+            "%9.3f"   % (self.eye.eye_area_2*1e9),
+            "%8.3f"   % self.min_corr_value,
+            "%8.3f"   % self.avg_corr_value, 
+            "%12d"    % self.min_corr_period, 
+            "%9d"     % self.pattern_offset_periods['offset'],
+            "%10.3e"  % self.eye.t_offset,
+            "%11.fns" % (self.pattern_delay*1e9),
+            "%11.3fns"% ((self.eye.t_offset + self.pattern_delay+40e-9)*1e9)
+            ]
+            )
+
+    def find_pattern_delay(self,tx_bit_pattern,rx_bit_pattern):
+        #need to do a proper cast to numpy for array comparison, but I am doing
+        #this on the plane - so no access to numpy manuals...
+        matched = False
+        short_match_length = 20
+        #print(rx_bit_pattern[0:short_match_length])
+        for i in range(len(tx_bit_pattern)-short_match_length):
+            #do a short comparison before committing to the full pattern match
+            compare = tx_bit_pattern[0:short_match_length] ==\
+            rx_bit_pattern[i:i+short_match_length]
+            if(not False in compare):
+                #print(tx_bit_pattern[0:short_match_length])
+                #print(rx_bit_pattern[i:i+short_match_length])
+                matched=True
+                break
+        return {'matched':matched, 'offset' : i}
 
     def plot_filter(self, filename="filter.png", title='filter', xmax=None):
         f, plt = pyplot.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
@@ -380,7 +469,7 @@ class dme_signal(object):
         plt.plot(self.fft_freq[1:], (10*np.log10(np.abs(self.noise[1:])**2/50)        +30 - 10*np.log10(40e6) - 10*np.log10(df)))
         plt.plot(self.fft_freq[1:], self.tx_psd_upper_limit(self.fft_freq[1:]))
         plt.plot(self.fft_freq[1:], self.tx_psd_lower_limit(self.fft_freq[1:]))
-        print(np.median((10*np.log10(np.abs(self.noise[1:60])**2/50)        +30 - 10*np.log10(40e6) - 10*np.log10(df))))
+        #print("Median Noise Level: %5.1f" % np.median((10*np.log10(np.abs(self.noise[1:60])**2/50)        +30 - 10*np.log10(40e6) - 10*np.log10(df))))
         pyplot.savefig(filename)
         pyplot.close(f)
 
@@ -403,9 +492,18 @@ class dme_signal(object):
                             self.t_domain_mdi[i],
                             self.t_domain_filtered[i]))
 
+    def output_tx_ifft_to_file(self, filename="tx_ifft.txt"):
+        with open(filename, 'w') as out:
+            out.write("#time t_domain_mdi t_domain_filtered\n")
+            o = np.fft.irfft(self.fft_value)
+            for i in range(0,len(self.fft_freq)):
+                out.write("%.12e %.12e\n" % 
+                        (i * self.sample_period, o[i])
+                        )
+
 
 class dme_transmitter(dme_signal):
-    def __init__(self,ts=1/81.92e6,ns=8192,symbol_period=80e-9,n_symbols=1253,amplitude=0.5,zin=None):
+    def __init__(self,ts=1/81.92e6,ns=8192,symbol_period=80e-9,n_symbols=1253,amplitude=0.5,zin=None,wake_signal=False):
         super(dme_transmitter, self).__init__()
         self.sample_period = ts #1/81.92e6
         self.ns = ns #8192
@@ -416,13 +514,81 @@ class dme_transmitter(dme_signal):
         self.zin=zin
         self.tstop=ts*ns 
 
-        self._generateRandomBits()
+        self._generateWakeSignal()
+        self._generateRandomBits(all_ones=wake_signal)
         self.filter = np.ones_like(self.fft_freq,dtype=np.complex)
 
-    def _generateRandomBits(self):
-        self.pattern = np.random.randint(2,size=self.n_symbols)
-        self.pattern[0]=1
-        self.pattern[-1]=0
+    def _scrambler(self,pattern):
+        scrambler = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        scrambled = []
+        dl = 0
+        dout_last=0
+        x=0
+        state=0
+        dme_or=0
+        
+        for i in pattern:
+            #state1
+
+            #0
+            dl = (0|dout_last) ^ dl
+            dme_out = (~dl) & 0x01
+            #1
+            dout = i ^ scrambler[16] ^ scrambler[13]
+            scrambler.pop()
+            scrambler.insert(0,dout)
+            dl = (1|dout) ^ dl
+            dme_out2 = (~dl) & 0x01
+            if(x<30):
+                print("%03d %d %d %d %d" % (x, dout, dl, dme_out, dme_out2))
+            scrambled.append(dme_out) 
+            dout_last=dout
+            x+=1
+        return scrambled
+
+    def _generateWakeSignal(self):
+
+        wake_period=1.6e-6
+        self.trise=10e-9 #make this an input parameter
+        self.pwl = ["0 0"]
+        tflat = (wake_period-(4*self.trise))/2
+        t0 = 15.1e-6
+        self.pwl.append("%.12f 0" % t0)
+        for i in range(12):
+            b = 0
+            x = b * self.amp * 2
+            self.pwl.append("%.12f %.2f" % (t0 +  self.trise           , x-self.amp))
+            self.pwl.append("%.12f %.2f" % (t0 + (self.trise+tflat)    , x-self.amp))
+            self.pwl.append("%.12f %.2f" % (t0 + (3*self.trise+1*tflat)  ,
+                -self.amp+(2*self.amp*(1-b))))
+            self.pwl.append("%.12f %.2f" % (t0 + (3*self.trise+2*tflat),
+                -self.amp+(2*self.amp*(1-b))))
+            t0 += wake_period
+        self.pwl.append("%.12f 0" % t0)
+        t0 += 15.1e-6
+        self.pwl.append("%.12f 0" % t0)
+
+    def _generateRandomBits(self,all_ones=False):
+        #self.pattern = np.random.randint(2,size=self.n_symbols)
+        self.pattern = np.zeros(self.n_symbols,dtype=np.int8)
+        #self.pattern[::2] = 0
+        #self.pattern[1::2] = 1
+        print(self.pattern)
+        self.pattern = self._scrambler(self.pattern)
+        #self.pattern[0]=0
+        #self.pattern[-1]=1
+        print(self.pattern)
+        #exit(1)
+        #print(len(self.pattern))
+        if(all_ones):
+            #self.pattern = np.empty(self.n_symbols)
+            #self.pattern[::2] = 0
+            #self.pattern[1::2] = 1
+            self.pattern = np.ones(self.n_symbols,dtype=np.int8)
+            self.pattern[0:100] = 1
+            self.pattern[101:] = 0
+            print(self.pattern)
+            print(len(self.pattern))
         
         self.trise=10e-9 #make this an input parameter
         self.pwl = ["0 %.3f" % self.amp]
@@ -440,6 +606,9 @@ class dme_transmitter(dme_signal):
                 -self.amp+(2*self.amp*(1-i))))
             t0 += self.symbol_period
 
+        if(all_ones):
+            self._generateWakeSignal()
+
         #pass the piece wise linear version of the DME signal to pwl_wave
         #use pwl_wave methods to get interpolated samples of the DME signal
         self.pwl_wave = pwlWave()
@@ -454,7 +623,23 @@ class dme_transmitter(dme_signal):
         #if the complex input impedance of a transmission line is passed to this
         #method modify the fft value by that impedance
         if(self.zin):
-            self.fft_value = self.zin * self.fft_value
+            #zl = 0+12e3j
+            #zc = 0-48e3j
+            #r = 20e3
+            #zf = (1/((1/zl)+(1/zc)+(1/r)))
+            #print(zf)
+            #print(np.abs(zf))
+            #print(np.absolute(zf))
+            #print(np.angle(zf)*180/np.pi)
+            #z_norton = 100 + 0j
+            z = np.array(self.zin)
+            #zx=[]
+            #for i in range(len(z)):
+            #    zx.append(1/((1/z_norton)+(1/z[i])))
+            self.fft_value = z * self.fft_value
+            #self.output_zin_to_file(self.zin,zx)
+
+
 
     def _sample_dme(self):
         self.sampled_times  = []
@@ -468,6 +653,13 @@ class dme_transmitter(dme_signal):
         values = np.array(self.t_domain_mdi, dtype=float)
         self.fft_value = np.fft.rfft(values)
         self.fft_freq  = np.fft.rfftfreq(n=values.size, d=self.sample_period)
+
+    def output_zin_to_file(self, z1, z2, filename="zin.txt"):
+        with open(filename, 'w') as out:
+            for x in range(len(z1)):
+                out.write("%g %g %g %g\n" % (np.absolute(z1[x]),
+                    np.angle(z1[x])*180/np.pi,
+                    np.absolute(z2[x]), np.angle(z2[x])*180/np.pi))
 
     def output_pwl_to_file(self, filename="pwl.txt"):
         with open(filename, 'w') as out:
@@ -483,9 +675,10 @@ class dme_transmitter(dme_signal):
 
 #compare a dme wave, symbol by symbol, to an ideal symbol to recover data
 class dme_receiver(dme_signal):
-    def __init__(self, node, dme_transmitter, imgDir):
+    def __init__(self, node_number, dme_transmitter, imgDir):
         super(dme_receiver, self).__init__()
-        self.node = node
+        #self.node = node
+        self.node_number = node_number
         self.dme_transmitter=dme_transmitter
         self.symbol_period=dme_transmitter.symbol_period
         self.sample_period=dme_transmitter.sample_period
@@ -513,56 +706,149 @@ class dme_receiver(dme_signal):
         self.t_domain_filtered = np.fft.irfft(self.fft_value_filtered)
 
 class dme_correlator(object):
-    def __init__(self, t_domain_dme, ts, delay=0, dme_input=None, filename='dme_wave.txt'):
+    def __init__(self, t_domain_dme, ts, symbol_period=80e-9, delay=0, dme_input=None, filename='dme_wave.txt'):
         #make an ideal symbol for correlation of received signals
         self.filename = filename
+        self.symbol_period=symbol_period
         self.corr_pwl =     ["0.0 1.0"]
-        self.corr_pwl.append("39.999e-9 1")
-        self.corr_pwl.append("40.001e-9  -1")
-        self.corr_pwl.append("80e-9      -1")
+        #print(self.symbol_period)
+        #print((self.symbol_period/2) - 1e-12)
+
+        self.corr_pwl.append("%g  1" % ((self.symbol_period/2) - 1e-12))
+        self.corr_pwl.append("%g -1" % ((self.symbol_period/2) + 1e-12))
+        self.corr_pwl.append("%g -1" % self.symbol_period)
         self.corr_wave = pwlWave()
         self.corr_wave.buildPwlFromText(self.corr_pwl)
 
-        period_last = -1000
-        period      = -999
+        self.corr_pwl0 =     ["0.0 0.0"]
+        self.corr_pwl0.append("%g  0" % ((self.symbol_period/2) - 1e-12))
+        self.corr_pwl0.append("%g  1" % ((self.symbol_period/2) + 1e-12))
+        self.corr_pwl0.append("%g  1" % self.symbol_period)
+        self.corr_wave0 = pwlWave()
+        self.corr_wave0.buildPwlFromText(self.corr_pwl0)
+
+        self.corr_pwl1 =     ["0.0 1.0"]
+        self.corr_pwl1.append("%g  1" % ((self.symbol_period/2) - 1e-12))
+        self.corr_pwl1.append("%g  0" % ((self.symbol_period/2) + 1e-12))
+        self.corr_pwl1.append("%g  0" % self.symbol_period)
+        self.corr_wave1 = pwlWave()
+        self.corr_wave1.buildPwlFromText(self.corr_pwl1)
+
+        #self.corr_mask_pwl =     ["0.0 0.0"]
+        #self.corr_mask_pwl.append("19.999e-9 0" % ((bit_per/4) - 1e-12))
+        #self.corr_mask_pwl.append("20.000e-9 1" % ((bit_per/4) + 1e-12))
+        #self.corr_mask_pwl.append("29.999e-9 1")
+        #self.corr_mask_pwl.append("30.000e-9 0")
+        #self.corr_mask_pwl.append("59.999e-9 0")
+        #self.corr_mask_pwl.append("60.000e-9 1")
+        #self.corr_mask_pwl.append("69.999e-9 1")
+        #self.corr_mask_pwl.append("70.000e-9 0")
+        #self.corr_mask_pwl.append("80.000e-9 0")
+        #self.corr_mask = pwlWave()
+        #self.corr_mask.buildPwlFromText(self.corr_mask_pwl)
+
+        self.min_corr_period = -1000
+        self.min_corr_value = 10
+
+        #resample t_domain_dme
+        resample_freq = 1000e6
+        resample_period = 1/resample_freq
+        #resample_period = ts
+        dme_pwl = []
+        t=0
+        for x in t_domain_dme:
+            dme_pwl.append("%.12g %.12g" % (t,x))
+            t+=ts
+        self.resample_dme = pwlWave()
+        self.resample_dme.buildPwlFromText(dme_pwl)
+        #print(dme_pwl[-1])
+        tlast = t-ts
+
+        resampled = []
+        t=0
+        while t<tlast:
+            resampled.append(self.resample_dme.pwlTimes(t))
+            t+=resample_period
+        #exit(1)
+
+        period_last = -1e9
+        period      = -1e9+1
         csum=0
+        csum0=0
+        csum1=0
         ccount=-1
         self.corr_avg = []
         corr_count = []
-        recovered = []
+        rx_len = len(dme_input.pattern)
+        #print(rx_len)
+        #self.pattern = np.random.randint(2,size=self.n_symbols)
+        self.recovered_bit_pattern = np.zeros_like(dme_input.pattern)
         corr_ratio = 0
         i=0
         with open(filename, 'w') as dme:
-            dme.write("#%s %s %s %s %s %s %s %s %s %s %s\n" % 
-                    ("time", " x", " dme_input.t_domain_mdi[i]", "sl", "c", "period",
+            dme.write("%15s %15s %17s %5s %8s %6s %9s %15s %4s %6s %12s\n" % 
+                    ("time", " x", "t_domain_mdi[i]", "slice", "corr_ref", "period",
                         "corr_meas", "offset_time", "csum", "ccount", "index>length"))
+
             #print(delay)
-            length = len(t_domain_dme)
+            signal = t_domain_dme
+            time_step = ts
+            if(True):
+                signal = resampled
+                time_step = resample_period
+            #print(ts)
+            #print(resample_period)
+            length = len(signal)
             stop   = length
             index=0
             #going 1 past 'stop' makes sure the last bit is fully interpreted
+            bit_index=0
+            #print("delay: %.3f" % (delay*1e9))
+            ##bound delays within +-40ns of 0 time
+            if(delay > self.symbol_period/2):
+                delay-=self.symbol_period
+            #print("delay: %.3f" % (delay*1e9))
+
+            #print("%d %g %g" % (math.floor(self.symbol_period/time_step),self.symbol_period,time_step))
+
             while(index<=stop+1):
                 i=index%length
-                x=t_domain_dme[i]
+                x=signal[i]
+                sln = 0
+                if x > 0.0:
+                    sln = 1
+
                 sl = -1
                 if x > 0:
                     sl = 1
-                time=(index*ts)
-                offset_time = (time-delay-40e-9)
-                period = math.floor((time-delay-40e-9)/80e-9)
+                time=(index*time_step)
+                offset_time = (time-delay+(self.symbol_period/2))
+                period = math.floor(offset_time/self.symbol_period)
                 #align the 'perfect' correlator signal with the recovered data
                 #subtracting delay here makes the clock transitions line up on
                 # the 80ns marks
-                c = self.corr_wave.pwlTimes(time-delay-40e-9)
+                c = self.corr_wave.pwlTimes(offset_time)
+                c0 = int(self.corr_wave0.pwlTimes(offset_time))
+                c1 = int(self.corr_wave1.pwlTimes(offset_time))
+                #m = self.corr_mask.pwlTimes(offset_time)
                 corr_meas = abs(sl-c)
+                corr_meas0 = sln ^ c0
+                corr_meas1 = sln ^ c1
                 if(period != period_last and ccount>0):
-                    corr_ratio = (csum/ccount) - 1.0
 
                     rec = -1
-                    if(corr_ratio >= 0.0):
-                        rec=1
+                    if(True):
+                        corr_ratio = (csum/ccount)-1.0
+                        if(corr_ratio >= 0.0):
+                            rec=1
+                        else:
+                            rec=0
                     else:
-                        rec=0
+                        corr_ratio = ((csum/2.)/ccount)
+                        if(corr_ratio >= 0.5):
+                            rec=1
+                        else:
+                            rec=0
 
                     #this section ignores partial bits at the beginning
                     #by detecting if there were too few samples for the period
@@ -570,39 +856,60 @@ class dme_correlator(object):
                     #if there is a partial bit increase the 'stop' threshold by
                     #parital count and the partial bit will be picked up as part
                     #of the last bit
-                    if(ccount>=math.floor(80e-9/ts)-1):
-                        recovered.append(rec)
+                    if(ccount>=math.floor(self.symbol_period/time_step)-1):
+                        self.recovered_bit_pattern[bit_index] = rec
                         corr_count.append(ccount)
-                        self.corr_avg.append(abs(corr_ratio))
+                        crr = abs(corr_ratio)
+                        #if(crr < 0.5):
+                        #    crr = 1-crr
+                        self.corr_avg.append(crr)
+                        if crr < self.min_corr_value:
+                            self.min_corr_period = bit_index
+                            self.min_corr_value = crr
+                        bit_index +=1
                     else:
-                        #print("Period %d : Stop ADDED %d,%d" % (period,ccount,math.floor(80e-9/ts)-1))
+                        #print("Period %d : Stop ADDED %d,%d" % (period,ccount,math.floor(80e-9/time_step)-1))
+                        dme.write("#not_stored\n")
                         stop+=ccount
                     dme.write("\n")
                     period_last = period
                     csum=0
                     ccount=0
+                    csum0=0
+                    csum1=0
                 csum+=corr_meas
+                csum0+=corr_meas0
+                csum1+=corr_meas1
                 ccount+=1
                 #output some data for verification / debugging
-                dme.write("% .12f % .12f % .12f % d % d % d % d % .12f % .12f %d %s\n" % 
-                        (time, x, dme_input.t_domain_mdi[i],sl,c,period,
-                        corr_meas, offset_time, csum, ccount, (index>length) ))
+                try:
+                    dme.write("% 15.12f % 15.12f % 17.12f % 5d % 8d % 6d % 9d % 15.12f %4d %6d %12s %d %3d %d %3d %d\n" % 
+                            #(time, x, dme_input.t_domain_mdi[i],sl,c,period,
+                            (time, x, -999,sl,c,period,
+                            corr_meas, offset_time, csum, ccount,
+                            (index>length),
+                            sln, csum0, corr_meas0, csum1, corr_meas1))
+                except Exception as e:
+                    print("index = %d" % i)
+                    print(e)
 
                 index+=1
-            dme.write("#%s %s %s %s %s %s %s %s %s %s %s\n" % 
-                    ("time", " x", " dme_input.t_domain_mdi[i]", "sl", "c", "period",
+            dme.write("%15s %15s %17s %5s %8s %6s %9s %15s %4s %6s %12s\n" % 
+                    ("time", " x", "t_domain_mdi[i]", "slice", "corr_ref", "period",
                         "corr_meas", "offset_time", "csum", "ccount", "index>length"))
 
 
         if(0):
-            for i in range(len(recovered)):
+            for i in range(len(self.recovered_bit_pattern)):
                 if(self.corr_avg[i] < 0.6):
                     print("Bad Correlation: %04d %5.3f %d %d %d" %
-                        (i,self.corr_avg[i],dme_input.pattern[i],recovered[i],corr_count[i]))
+                        (i,self.corr_avg[i],dme_input.pattern[i],self.recovered_bit_pattern[i],corr_count[i]))
 
         #print("delay = %e" % delay)
         #print("min=%e" % np.amin(corr_avg))
-        self.min_corr_value = np.amin(self.corr_avg)
+        #self.min_corr_value = np.amin(self.corr_avg)
+        self.avg_corr_value = np.mean(self.corr_avg)
+        #exit(1)
 
     def plot_correlation(self, filename="corr.png", title='Correlation'):
         f, plt = pyplot.subplots(1,1, figsize=(10, 3))  # Create a figure and an axes.
@@ -635,7 +942,7 @@ class eye_diagram(object):
         self.slicefile =  os.path.join(imgDir, "slice%d.png" % self.number)
         self.nbins=320
         self.nbits=256
-        self.bin_width=symbol_period/self.nbins
+        self.bin_width=self.symbol_period/self.nbins
         self.bins   = [[] for x in range(self.nbins)]
         self.t_offset = 0
         self.xt = []
@@ -686,6 +993,9 @@ class eye_diagram(object):
         #subtract min_bin*bin_width from the timepoint values to center the transition on 0ns
         #adding half of a bin to the offset keeps the bin centered and it looks nicer in the plot
         self.t_offset = self.bin_width*(self.min_bin+0.5)
+        if(self.t_offset > self.symbol_period/2):
+            self.t_offset-=self.symbol_period
+
         for i in range(0,len(self.bins)):
             index = (i+self.min_bin) % len(self.bins)
             for s in self.bins[index]:
@@ -711,32 +1021,122 @@ class eye_diagram(object):
 
         #for i in range(start_index,end_index):
         a2 = np.transpose(self.heatmap)
+        #print(a2)
+        #print(len(a2))
         asum = 0
+        #print(start_index)
+        #print(end_index)
         for i in range(start_index,end_index+1):
             #assumes that nonzero returns nonzero indicies in ascending order
             p = np.nonzero(a2[i][128:])
             n = np.nonzero(a2[i][:128])
             #print(i)
             #print(p)
+            #print(n)
             #print(p[0][0]+128)
             #print(n[0][-1])
             #exit(1)
             asum += (p[0][0]+128-n[0][-1])
+        #exit(1)
 
         return(asum)
 
-    def plot_eye(self, filename=None, saturation_level=12):
+    def plot_eye(self, filename=None, saturation_level=12, offset_time=None):
+        if offset_time==None:
+            offset_time = self.t_offset
         #print(self.imgfile)
         if filename==None:
             filename=self.imgfile
         else:
             self.imgfile = filename
         f, eye = pyplot.subplots(1,1, figsize=(10, 10))  # Create a figure and an axes.
-        s = "Node %d - toffset %.2fns" % (self.number, self.t_offset*1e9)
+        s = "Node %d - toffset %.2fns" % (self.number, offset_time*1e9)
         eye.set_title(s)
-        eye.imshow(self.heatmap, cmap='hot', origin='lower', vmin=0, vmax=saturation_level, aspect='auto')  # Plot more data on the axes...
+        eye.imshow(self.heatmap, cmap='hot', origin='lower', vmin=0, vmax=saturation_level, aspect='auto')
         pyplot.savefig(filename)
         pyplot.close(f)
+
+    def plot_reflections(self, filename=None, saturation_level=12, index=0, eye_stats=None):
+        if filename==None:
+            filename=self.imgfile
+        else:
+            self.imgfile = filename
+
+        position = float(eye_stats['positions'][index]) #plot the 2d histogram
+        f, (network_plot, eye_opening_plot, jitter_plot, corr_plot, delay_plot, eye ) = pyplot.subplots(6,1, figsize=(15, 18), gridspec_kw={'height_ratios': [1, 1, 1, 1, 1, 3]})
+        ####mixing segment line
+        network_plot.plot([0,eye_stats['length']],[0,0], color="k")
+        color_index = 0
+        for node in eye_stats['attach_points']:
+            network_plot.plot([node], np.zeros_like([node]), "-o", color=eye_stats['color_array'][color_index-1])
+            color_index += 1
+            network_plot.plot(eye_stats['attach_points'][eye_stats['tx_index']-1],
+                    np.zeros_like(eye_stats['attach_points'][eye_stats['tx_index']-1]),
+                "-*",
+                color="k",
+                markerfacecolor="k",
+                markersize=12
+                )
+
+        network_plot.plot([position,position], [-0.01,0.01], color="k")
+        #### end mixing segment line
+
+        eye_opening_plot.plot(eye_stats['positions'], eye_stats['eye_area_1'], label="eye1")  
+        eye_opening_plot.plot(eye_stats['positions'], eye_stats['eye_area_2'], label="eye2")  
+
+        eye_opening_plot.set_xlabel("Cable Position (m)")
+        eye_opening_plot.set_ylabel("Eye Area (V*ns)")
+        eye_opening_plot.plot([position,position], [eye_stats['eye_area_1'][index],eye_stats['eye_area_2'][index]],
+                "-o" ,
+                "-*",
+                color="k",
+                markerfacecolor="k",
+                markersize=16)
+
+        jitter_plot.plot(eye_stats['positions'], eye_stats['crossing_width_1'], label="jitter1")
+        jitter_plot.plot(eye_stats['positions'], eye_stats['crossing_width_2'], label="jitter2")
+        jitter_plot.set_xlabel("Cable Position (m)")
+        jitter_plot.set_ylabel("Jitter (ns)")
+        jitter_plot.plot([position,position], [eye_stats['crossing_width_1'][index],eye_stats['crossing_width_2'][index]],
+                "-o" ,
+                "-*",
+                color="k",
+                markerfacecolor="k",
+                markersize=16)
+
+        corr_plot.plot(eye_stats['positions'],eye_stats['corr_avg'], label="corr_avg")  
+        corr_plot.plot(eye_stats['positions'],eye_stats['corr_min'], label="corr_min")  
+        corr_plot.plot([eye_stats['positions'][0],eye_stats['positions'][-1]],[0.65,0.65], label="corr_limit")  
+        corr_plot.set_xlabel("Cable Position (m)")
+        corr_plot.set_ylabel("Correlation Factor")
+        corr_plot.plot([position,position], [eye_stats['corr_avg'][index],eye_stats['corr_min'][index]],
+                "-o" ,
+                "-*",
+                color="k",
+                markerfacecolor="k",
+                markersize=16)
+
+        delay_plot.plot(eye_stats['positions'],eye_stats['pattern_delay'], label="pattern_delay")  
+        delay_plot.set_xlabel("Cable Position (m)")
+        delay_plot.set_ylabel("Pattern Delay")
+        delay_plot.set_ylim([0,400])
+        #print(pyplot.yticks())
+        print(eye_stats['pattern_delay'][index])
+        pyplot.yticks(ticks=range(0,400,80))
+        delay_plot.plot([position,position], [eye_stats['pattern_delay'][index],eye_stats['pattern_delay'][index]],
+                "-o" ,
+                "-*",
+                color="k",
+                markerfacecolor="k",
+                markersize=16)
+
+        s = "%4d - %6.2fm - toffset %.2fns" % (self.number, self.number*0.05, eye_stats['pattern_delay'][index])
+        eye.set_title(s)
+        eye.imshow(self.heatmap, cmap='hot', origin='lower', vmin=0, vmax=saturation_level, aspect='auto')
+
+        pyplot.savefig(filename)
+        pyplot.close(f)
+
 
     def plot_slice(self, filename=None):
         print(self.slicefile)
@@ -808,10 +1208,12 @@ class eye_diagram(object):
 
     def _make_eye(self):
         #generate a centered 2d histogram
+        #print("Generating 2d Histogram")
         self._make_histogram_2d()
     
         vmax=0.75
         vmin=-0.75
+        #print("Generating Heat Map")
         for i in range(0,len(self.bins)):
             index = (i+self.min_bin) % len(self.bins)
             for s in self.bins[index]:
@@ -819,7 +1221,9 @@ class eye_diagram(object):
                 self.heatmap[bin_y][i] += 1
 
         #determines 4 indicies indicating where the eyes open and close
+        #print("Measure zero crossings")
         self._measure_zero_crossing()
+        #print("Measure eye opening")
         dig_area = self._measure_opening_area(self.index0, self.index1)
         self.eye_area_1 = dig_area * self.bin_width * ((vmax - vmin) / self.nbits)
         dig_area = self._measure_opening_area(self.index2, self.index3)

@@ -7,10 +7,10 @@
 
 
 .subckt tlump t1p t1n t2p t2n rtn
-c1 t1p t1n {clump/4}
+*c1 t1p t1n {clump/4}
 l1p t1p t2p {llump/2} rser={rser}
 l2p t1n t2n {llump/2} rser={rser}
-c2 t2p t2n {clump/4}
+c2 t2p t2n {clump/2}
 cp1 t1p rtn {clump/2}
 cn1 t1n rtn {clump/2}
 cp2 t2p rtn {clump/2}

@@ -13,11 +13,325 @@ import math
 import re
 import numpy as np
 import argparse
+from collections import OrderedDict
 
 from os.path import dirname
 import os.path 
 sys.path.append(dirname(__file__)) #adds this file's director to the path
 import mpUtil
+
+class SignalIterator:
+    def __init__(self, signal):
+        self._signal = signal
+        self._index = self._signal.start_index
+
+    def __next__(self):
+        if self._index < self._signal.stop_index:
+            result = self._signal.getTimePointByIndex(self._index)
+            self._index += 1
+            return result
+        raise StopIteration
+
+#make groups by timepoint
+class SimData(object):
+    def __init__(self,trace_list):
+        self.steps = []
+        self.trace_list = trace_list
+        self.last_x_data=-1e20 #rediculously negative number
+        self.steps.append(self.newSimStep(trace_list))
+
+    def newSimStep(self,trace_list):
+        return SimStep(self.trace_list,len(self.steps))
+
+    #add a time point curated from the raw file
+    #the ltcsimraw object that calls this method
+    #sould pass a list of data that matches the 
+    #trace_list order and length
+    def addTimePoint(self,time_point_data):
+        if(self.last_x_data > time_point_data[0]):
+            self.steps.append(self.newSimStep(self.trace_list))
+        self.last_x_data = time_point_data[0]
+        self.steps[-1].addTimePoint(time_point_data)
+
+    def makeDifferentialSignal(self,labelp,labeln):
+        name = ""
+        for s in self.steps:
+            name = s.differentialSignal(labelp,labeln)
+            s.finalize_data()
+        return(name)
+        #TODO: add differential signal to trace list?
+
+    def signal(self,name):
+        signals = []
+        for s in self.steps:
+            signals.append(s.sigs[name])
+        return signals
+
+    #call this after all data has been added to the structure
+    #this will set things up for easy access later
+    def finalize_data(self):
+        for s in self.steps:
+            s.finalize_data()
+
+    #when doing an fft you need even time steps from the simulator
+    #even with commands to control the time setps the simulator will be
+    #inconsistent at the beginning and end of the sim
+    #restrict the data set to a subset of the data near the end of the trace
+    #the first few time steps and the last time step are inconsitent
+    def find_n_even_time_steps(self,n):
+        for s in self.steps:
+            s.find_n_even_time_steps(n)
+
+    def fft(self,ns):
+        self.find_n_even_time_steps(ns)
+        for s in self.steps:
+            s.fft()
+
+    def last_time_point(self,signal_name):
+        s = self.signal(signal_name)
+        tp = []
+        for x in s:
+            tp.append(x.getTimePointByIndex(-1))
+        return(tp)
+
+    #fh is either gp.stdin (opened in another part of the program
+    #or sys.stdout to send the data to the terminal
+    def gnuplot_fft(self,fh,signal_name):
+        output = self.signal(signal_name)
+        plotstring = bytes("plot for [i=0:%d] '-' u 1:2:3:4 w vectors lt i+1 filled size screen 0.01,5 t sprintf(\"%s_%%d\", i)\n" % (len(self.steps)-1,signal_name),'utf8')
+
+        fh.write(plotstring)
+        for o in output:
+            for x in o.iter_fft_plot_values():
+                noise_floor = o.fft_median
+                fh.write(b"%.12e %.12e 0 %.12e %.12e %.12e\n" %
+                        (x[0],noise_floor,x[1]-noise_floor,x[2],x[1]))
+            fh.write(b"e\n")
+        fh.write(b"\n\n")
+
+    #fh is either gp.stdin (opened in another part of the program
+    #or sys.stdout to send the data to the terminal
+    def gnuplot_signal(self,fh,signal_name):
+        output = self.signal(signal_name)
+        plotstring = bytes("plot for [i=0:%d] '-' u 1:2 w l lt i+1 t sprintf(\"%s_%%d\", i)\n" % (len(self.steps)-1, signal_name),'utf8')
+        fh.write(plotstring)
+        for o in output:
+            for x in o:
+                fh.write(b"%.12e %.12e\n" %
+                        (x[0],x[1]))
+            fh.write(b"e\n")
+        fh.write(b"\n\n")
+
+
+#grouped x-axis and several y-axis traces
+class SimStep(object):
+    def __init__(self,trace_list,step_number):
+        #make signal groups here
+        self.trace_list = trace_list
+        self.step_number=step_number
+        self.sigs = OrderedDict()
+        self.sigs[trace_list[0]] = TimeSignal(trace_list[0])
+        self.x_axis_signal = self.sigs[trace_list[0]]
+        self.start_index = 0
+        self.end_index = 0
+        for i in range(1,len(trace_list)):
+            #create signal objects
+            self.sigs[trace_list[i]] = Signal(trace_list[i])
+
+    #add a time point curated from the raw file
+    #the ltcsimraw object that calls this method
+    #sould pass a list of data that matches the 
+    #trace_list order and length
+    def addTimePoint(self,time_point_data):
+        for i,x in enumerate(self.trace_list):
+            self.sigs[x].addData(time_point_data[i])
+
+    def differentialSignal(self,labelp,labeln):
+        d = DifferentialSignal(self.sigs[labelp],self.sigs[labeln])
+        d.x_axis_signal = self.sigs[self.trace_list[0]]
+        self.sigs[d.name] = d
+        self.trace_list.append(d.name)
+        return(d)
+
+    def finalize_data(self):
+        for s in self.sigs:
+            self.sigs[s].stop_index  = len(self.sigs[s].values)-1
+            self.sigs[s].start_index = 0
+            self.sigs[s].x_axis_signal = self.sigs[self.trace_list[0]]
+
+    def find_n_even_time_steps(self,n):
+        self.sigs[self.trace_list[0]].find_n_even_time_steps(n)
+        #spread the word to the rest of the signals
+        for i in range(1,len(self.trace_list)):
+            self.sigs[self.trace_list[i]].stop_index = \
+            self.sigs[self.trace_list[0]].stop_index
+
+            self.sigs[self.trace_list[i]].start_index = \
+            self.sigs[self.trace_list[0]].start_index
+
+    def fft(self):
+        for s in self.sigs:
+            self.sigs[s].fft()
+
+class Signal(object):
+    #start and end index as class variables keep all of the data synchronized
+    #on the x-axis when a subset of the data traces is being used.
+    #frequency values
+
+    def __init__(self,name):
+        self.name = name
+        self.values=[]
+        self.fft_phasors=[]
+        self.iter=0
+        self.is_x_axis=False
+        self.x_axis_signal=None
+        self.stop_index=0
+        self.start_index=0
+
+    def __str__(self):
+        s = "name  : %s\nlen   : %d\nstart : %d\nstop  : %d" % (self.name,
+                len(self.values), self.start_index, self.stop_index)
+        return s
+
+    def __repr__(self):
+        s = "name : %s, len : %d, start : %d, stop  : %d" % (self.name,
+                len(self.values), self.start_index, self.stop_index)
+        return s
+
+    def __iter__(self):
+        return SignalIterator(self)
+
+    def iter_fft_plot_values(self):
+        for i,x in enumerate(self.fft_phasors):
+            #print(i)
+            yield (self.x_axis_signal.fft_phasors[i],20*np.ma.log10(np.abs(x)),
+                    np.angle(x))
+
+    #return the name of the signal with v() or ix(), etc stripped off
+    #example return is ('v','a') as a tuple for v(a)
+    #or ('ix','m1:s') for ix(m1:s)
+    def _simple_name(self):
+        if(self.is_x_axis):
+            return self.name
+        else:
+            m1 = re.search('(v|ix|i)\((\S*)\)',self.name,flags=re.IGNORECASE);
+            try:
+                return(m1.group(1),m1.group(2))
+            except Exception as e:
+                print(e)
+                print("Can't understand this signal '%s'" % self.name)
+                exit(1)
+
+    def addData(self,value):
+        self.values.append(value)
+
+    def getLength(self):
+        return len(self.values[self.start_index:self.stop_index])
+
+    def getValueByIndex(self,index):
+        try:
+            return self.values[index]
+        except Exception as e:
+            print(e)
+            print("index outside of array: %d / %d" % (index, len(self.values)))
+        return None
+
+    #used for iteration throught the data.  Index refers to a cell in the values
+    #array
+    def getTimePointByIndex(self, index):
+        return (self.x_axis_signal.getValueByIndex(index),
+                self.getValueByIndex(index))
+
+    def getT0(self):
+        return (self.x_axis_signal.getValueByIndex(self.start_index),
+                self.getValueByIndex(self.start_index))
+
+    def fft(self):
+        self.values = np.array(self.values, dtype=float)
+        self.fft_phasors = np.fft.rfft(self.values[self.start_index:self.stop_index])
+
+        #use masked arrays to stop -inf from messing up median statistics
+        a = np.abs(self.fft_phasors)
+        l = 20*np.ma.log10(a)
+        self.fft_median = np.ma.median(l)
+        print("%s: median %.1fdB" % (self.name, self.fft_median))
+
+class DifferentialSignal(Signal):
+    #sigp and sign are Signal objects
+    def __init__(self,sigp,sign):
+        self.sigp = sigp
+        self.sign = sign
+        self.start_index=0
+        self.stop_index=0
+
+        np = sigp._simple_name()
+        nn = sign._simple_name()
+        self.name = "%s(%s,%s)" % (np[0],np[1],nn[1])
+        self.is_x_axis=False
+        self.values=[]
+
+        for i in range(len(self.sigp.values)):
+            self.values.append(self.sigp.values[i]-self.sign.values[i])
+
+class TimeSignal(Signal):
+    #limit the precision of the number to stop floating point error from 
+    #creating jitter
+
+    def get_time_step(self,index,time_precision=15):
+        return round(self.values[index]-self.values[index-1],time_precision)
+
+    def verify_time_steps(self,time_precision=15):
+        #check that all time steps are equal to dt
+        #and extract differentail signals
+        dt = self.get_time_step(self.start_index+1,time_precision)
+        ok=True
+        for i in range(self.start_index+1,self.stop_index):
+            d = self.get_time_step(i,time_precision)
+            if(d != dt):
+                #print("%d %e != %e" % (i, d, dt))
+                ok=False
+        return ok
+
+    def find_n_even_time_steps2(self,n):
+        d = np.diff(self.values)
+        for i,x in enumerate(d):
+            print(i,x)
+
+    #look for a run of even time steps so a time domain signal can
+    #be converted to a frequency domain signal
+    def find_n_even_time_steps(self,n):
+        time_precision=15
+        stop_index=len(self.values)-1
+        start_index=stop_index-n
+        found=False
+        while(len(self.values[start_index:stop_index]) >= n and not found):
+            found=True
+            dt = self.get_time_step(stop_index,time_precision)
+            #print(stop_index)
+            for i in range(stop_index,start_index,-1):
+                t = self.get_time_step(i,time_precision)
+                #print("%5d %.15e %.15e" % (i,t,dt))
+                if(dt != t):
+                    stop_index=i-1
+                    start_index=stop_index-n
+                    found=False
+                    break
+        if(found):
+            self.start_index=start_index
+            self.stop_index=stop_index
+            #print("%d %d %d" % (len(self.values[self.start_index:self.stop_index]),self.start_index, self.stop_index))
+        else:
+            self.find_n_even_time_steps2(n)
+            print("Couldn't find enough even timesteps for fft")
+            print(stop_index)
+            print(start_index)
+            print(stop_index-start_index)
+            exit(1)
+
+    def fft(self):
+        dt = self.get_time_step(self.start_index+1)
+        self.fft_phasors  = np.fft.rfftfreq(n=int(self.getLength()), d=dt)
+
 
 class ltcsimraw():
 
@@ -146,33 +460,24 @@ class ltcsimraw():
     
     #pass a variable number to be extracted from the file
     def getSignal(self,varnums):
-
-        sig = []
-        time = []
         with open(self.rawfile, "rb") as f:
             #print( self.binary_start)
             f.seek(self.binary_start)
             size = self.getChunkSize(f)
             ans = []
             tp = []
+
+            #chose the data reading method
+            readfunc = self.readReal
+            if self.complex_data:
+                readfunc = self.readComplex
             
             for n in range(self.points):
                 chunk = f.read(size)
                 if chunk:
-                    if self.complex_data:
-                        p = self.readComplex(chunk,varnums)
-                        tp.append(p[0])
-                        for i,v in enumerate(varnums):
-                            #readComplex adds the frequency to the list
-                            #the +1 in the following line corrects for it.
-                            tp.append(p[i+1])
-                        ans.append(tp)
-                        tp = []
-                    else:
-                        p = self.readReal(chunk,varnums)
-                        ans.append(p)
+                    p = readfunc(chunk,varnums)
+                    ans.append(p)
             f.close()
-        
         return ans
 
     #parses complex number from a chunk of the file.
@@ -269,10 +574,13 @@ class ltcsimraw():
         i = self.variableNumber[var]
         return self.tp[i]
 
-    def getSignals(self, vlist, ilist, others=[]):
-
+    #decodes signals names into variable numbers 
+    def getSignalLabels(self, vlist, ilist, others=[]):
         y = []
         labels = ["time"]
+        if(self.complex_data):
+            labels = ["frequency"]
+
         for v in vlist:
             s = "v(%s)" % v.lower()
             for i in self.variables:
@@ -298,45 +606,95 @@ class ltcsimraw():
                     y.append(self.variableNumber[i])
                     labels.append(i)
                     continue
+        return (y, labels)
 
-        #print( y)
+    #returns data in an aoa
+    def getSignals(self, vlist, ilist, others=[]):
+        (y,labels)=self.getSignalLabels(vlist,ilist,others)
         sig = self.getSignal(y)
         return (sig, labels)
 
-    def scattering_parameters(self, vport1, iport1, vport2, iport2, rin=50,
-            rout=50):
+    #returns data as a hash of signal objects
+    def getSignalObjects(self, vlist, ilist, others=[]):
+        (y,labels)=self.getSignalLabels(vlist,ilist,others)
+
+        #print(labels)
+        #setup a dict with signal names as the keys 
+        #and signal objects as the value
+        simdata = SimData(labels)
+        return self.readSignals(simdata,y)
+
+    #read data into signal objects
+    def readSignals(self,sigs,varnums):
+        with open(self.rawfile, "rb") as f:
+            f.seek(self.binary_start)
+            size = self.getChunkSize(f)
+
+            #choose the read function
+            readfunc = self.readReal
+            if self.complex_data:
+                readfunc = self.readComplex
+            
+            for n in range(self.points):
+                chunk = f.read(size)
+                if chunk:
+                    p = readfunc(chunk,varnums)
+                    sigs.addTimePoint(p)
+        sigs.finalize_data()
+        return sigs
+
+    def ac_gain(self, vport1, vport2):
+        (data,labels) = self.getSignals([],[],[vport1,vport2])
+        index = dict(zip(labels, range(0,len(labels))))
+        av = []
+        frequency=[]
+        for x in data:
+            vend = x[index[vport2]]
+            vin  = x[index[vport1]]
+            av.append(vend/vin)
+            frequency.append(x[0])
+        return({"frequency" : frequency , "av" : av})
+
+    def scattering_parameters(self, vport1, iport1, vport2, iport2, rin=50, rout=50):
         (data,labels) = self.getSignals([],[],[vport1[0],vport1[1],vport2[0],vport2[1],iport1,iport2])
         index = dict(zip(labels, range(0,len(labels))))
         #print(labels)
         frequency=[]
         s11=[]
         s11_phase=[]
+        s22=[]
+        s22_phase=[]
         dm_cm=[]
         s21=[]
         gain=[]
         phase=[]
-        zin=[50]
+        zin=[rin]
         zin_mag=[]
         zin_phase=[]
+        zout=[rout]
+        zout_mag=[]
+        zout_phase=[]
+
         for x in data:
             vend_cm = (x[index[vport2[0]]]+x[index[vport2[1]]])/2
             vend    = x[index[vport2[0]]]-x[index[vport2[1]]]
             iend    = x[index[iport2]]
             vin     = x[index[vport1[0]]]-x[index[vport1[1]]]
             iin     = x[index[iport1]]
-            rin     = 50
-            rout    = 50
             a1 = (vin + (iin*rin))
             b1 = (vin - (iin*rin))
             a2 = (vend + (iend*rout))
             b2 = (vend - (iend*rout))
-            s11_mp  = self.decodeComplex(a1 / b1)
+            s11_mp  = self.decodeComplex((a1 / b1))
+            s22_mp  = self.decodeComplex((a2 / b2))
             s21_mp  = self.decodeComplex(b2 / a1)
             gain_mp = self.decodeComplex(vend/vin)
             dm_cm_mp = self.decodeComplex(vend_cm/vin)
             frequency.append(x[0])
             s11.append(s11_mp[0])
             s11_phase.append(s11_mp[1])
+            s22.append(s22_mp[0])
+            s22_phase.append(s22_mp[1])
             s21.append(s21_mp[0])
             gain.append(gain_mp[0])
             phase.append(gain_mp[1])
@@ -344,17 +702,25 @@ class ltcsimraw():
             zin.append(vin / iin)
             zin_mag.append(pow(10,self.decodeComplex(vin/iin)[0]/20))
             zin_phase.append(self.decodeComplex(vin/iin)[1])
+            zout.append(vend / iend)
+            zout_mag.append(pow(10,self.decodeComplex(vend/iend)[0]/20))
+            zout_phase.append(self.decodeComplex(vend/iend)[1])
 
         return {
             "frequency" : frequency,
             "s11" : s11,
             "s11_phase" : s11_phase,
+            "s22" : s22,
+            "s22_phase" : s22_phase,
             "s21" : s21,
             "gain" : gain,
             "phase" : phase,
             "zin" : zin,
             "zin_mag" : zin_mag,
             "zin_phase" : zin_phase,
+            "zout" : zout,
+            "zout_mag" : zout_mag,
+            "zout_phase" : zout_phase,
             "dm_cm" : dm_cm,
             }
 
@@ -412,8 +778,12 @@ class ltcsimraw():
     def decodeComplex(self,cmplx):
         a=np.array([cmplx.real,cmplx.imag])
         a.dtype = complex
-        ans = (20*math.log10(np.absolute(a)), \
-            np.angle(a,deg=True)[0])
+        ans = [1e-308,0]
+        try:
+            ans = (20*math.log10(np.absolute(a)), \
+                np.angle(a,deg=True)[0])
+        except:
+            pass
         return ans
 
     def plotComplex(self,sigs,nsteps,names,corners):

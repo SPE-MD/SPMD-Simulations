@@ -1,26 +1,34 @@
 {
     "defaults_comment" : "This are the default configuration parameters.  These can be overridden by command line args or by fields in a test-specific json file",
     "includes" : [
-        "tlump2.p",
+        "tlump_cd.p",
         "node.p",
         "lcomp.p"
     ],
+    "dbfolder" : "sweep",
+    "tx_amplitude" : 0.5,
+    "prime_xx" : 617,
+    "prime" : 157,
+    "bit_per" : 80e-9,
+    "ns_exp_comment" : "ns_exponent sets the adc precision like this: 2^ns_exponent",
+    "ns_exponent_x" : 16,
+    "ns_exponent" : 14,
+    "rtx" : 50,
     "analysis" : "ac",
     "nodes" : 16,
-    "length" : 70,
+    "length" : 75.0,
     "random_attach" : false,
     "start_attach" : 1,
-    "end_attach" : 10,
+    "end_attach" : 14,
     "start_pad" : 0,
     "end_pad" : 0,
-    "separation_min" : 0.316,
+    "separation_min" : 0.2,
     "segments_per_meter" : 20,
-    "drop_max" : 0.01,
+    "drop_max" : 0.1,
     "random_drop" : false,
-    "seed" : -1,
+    "seed" : 153549,
     "tx_node" : 1,
     "attach_error" : 0,
-    "attach_points": null,
     "attach_points": [
         0.0,
         63.000,
@@ -39,13 +47,20 @@
         74.600,
         74.800
     ],
+    "attach_points": null,
     "noautoscale" : true,
     "noplot" : false,
     "plot_png_filename" : "zcable.png",
+    "correlator" : {
+        "resample_period" : 1e9
+    },
     "tx_filter" : {
         "comment"  : "list of filters to apply to the transmitted data",
         "plot" : true,
-        "filters" : [
+        "rawfile_x" : "tx_filter_617_14.raw",
+        "rawfile" : "tx_filter_157_16.raw",
+        "filters" : [],
+        "filters_x" : [
             {
                 "filter_type" : "lpf",
                 "cutoff" : 20e6,
@@ -57,26 +72,27 @@
         "comment" : "cmatch declares how well the terminations match (in pct), 0 means perfet match. -1 means ccn is 1% high, ccp i 1% low",
         "rterm" : 100,
         "rtol" : 0,
-        "ccouple" : 220e-9,
+        "ccouple" : 200e-9,
         "cmatch" : 0.00
     },
     "default_node" : 
     {  
-        "drop_length" : 0.01,
+        "drop_length" : 0.1,
         "random_drop" : false,
         "cnode" : 30.0e-12,
-        "lcomp" : 80e-12,
+        "lcomp" : 80e-19,
         "lpodl" : 80e-6,
         "rnode" : 10e3,
         "ccouple" : 220e-9,
         "lcomp_match" : 0,
         "spice_model" : "node",
         "drop_model" : null,
+        "suffix" : ["p","n"],
         "rx_filter" : {
             "comment"  : "list of filters to apply to the received data for this node",
             "plot" : true,
-            "filters" : [],
-            "filters_x" : [
+            "filters_x" : [],
+            "filters" : [
                 {
                     "filter_type" : "hpf",
                     "cutoff" : 500e3,
@@ -84,9 +100,15 @@
                 },
                 {
                     "filter_type" : "lpf",
-                    "cutoff" : 150e6,
-                    "order" : 3
+                    "cutoff" : 15e6,
+                    "order" : 1
+                },
+                {
+                    "filter_type" : "lpf",
+                    "cutoff" : 30e6,
+                    "order" : 1
                 }
+
             ]
         }
     },
@@ -94,7 +116,7 @@
     {
         "model"       : "panduit_18g",
         "gauge"       : 18,
-        "Zo"          : 100,
+        "Zo"          : null,
         "spice_model" : "tlump"
     },
     "cable_models" :
@@ -108,7 +130,7 @@
             "rskin"     : 1.134268e-5,
             "l"          : 20.6435e-9 ,
             "c"          : 2.25026e-12,
-            "rdc"        : 0.002615
+            "rdc"        : 0.00094
         },
         "panduit_23g" : 
         {
@@ -119,7 +141,7 @@
             "rskin"      : 3.85483e-5,
             "l"          : 30.69876e-9 ,
             "c"          : 2.537090e-12,
-            "rdc"        : 0.008779
+            "rdc"        : 0.00372
         },
         "random_junk" : 
         {
@@ -136,5 +158,4 @@
     "trunk_description" : {
         "segments" : []
     }
-
 }
